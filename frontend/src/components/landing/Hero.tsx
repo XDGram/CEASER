@@ -59,14 +59,14 @@ export function Hero() {
       <motion.div style={{ y, opacity, scale }} className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-16 sm:pt-24 pb-14 grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center">
         <div>
           <motion.span {...up(0)} className="pill">
-            NEAR testnet · Memecoins with mechanics
+            Memecoins with mechanics · NEAR Hackathon 2026
           </motion.span>
-          <motion.h1 {...up(0.08)} className="mt-6 text-[clamp(38px,5.6vw,64px)] leading-[1.02] tracking-tight text-ink">
+          <motion.h1 {...up(0.08)} className="mt-6 h-hero text-ink">
             Lock your memecoin.
             <br />
             <span className="text-ink-3">Get paid when</span> others dump.
           </motion.h1>
-          <motion.p {...up(0.18)} className="mt-6 max-w-[480px] text-[15px] leading-relaxed text-ink-2">
+          <motion.p {...up(0.18)} className="mt-7 max-w-[500px] lede">
             CEASER is a commitment protocol on NEAR. Hold your bag to the targets you set, join your community's Challenge, and collect the exit penalties of everyone who sold early. Stake NEAR and your share gets multiplied.
           </motion.p>
           <motion.div {...up(0.28)} className="mt-8 flex flex-wrap items-center gap-3">

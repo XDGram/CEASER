@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useProtocol } from "../../lib/protocol";
 import { fromUnits, mult } from "../../lib/near";
+import { Reveal, SectionIntro } from "./Reveal";
 
 const reveal = (i = 0) => ({ initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-60px" }, transition: { duration: 0.6, delay: i * 0.08 } });
 
@@ -27,15 +28,13 @@ function Ladder() {
 export function Mechanics() {
   const { tiers } = useProtocol();
   return (
-    <section id="mechanics" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32 scroll-mt-20">
-      <motion.h2 {...reveal()} className="text-[clamp(28px,4.4vw,48px)] leading-[1.06] tracking-tight max-w-[820px]">
-        <span className="text-ink">Three mechanics define CEASER.</span> <span className="text-ink-3">Everything else is scaffolding.</span>
-      </motion.h2>
+    <Reveal id="mechanics" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">
+      <SectionIntro title="Three mechanics define CEASER." ghost="Everything else is scaffolding." text="Each one is a few lines of contract code. Together they turn holding from a solo gamble into a coordinated, NEAR-aligned game." />
 
       <div className="mt-12 grid md:grid-cols-3 gap-5">
         <motion.div {...reveal(0)} className="card p-6 sm:p-7 flex flex-col">
           <div className="pixel text-accent text-[13px]">01</div>
-          <h3 className="mt-2 text-[20px] tracking-tight">ROI-laddered unlocks</h3>
+          <h3 className="mt-2 text-[20px]">ROI-laddered unlocks</h3>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">Split your bag into rungs that unlock as price climbs past targets set from the price at lock time. Your future self can't sell the 25% meant for +200% at +40%.</p>
           <div className="mt-6">
             <Ladder />
@@ -44,7 +43,7 @@ export function Mechanics() {
 
         <motion.div {...reveal(1)} className="card p-6 sm:p-7 flex flex-col border-ink">
           <div className="pixel text-accent text-[13px]">02</div>
-          <h3 className="mt-2 text-[20px] tracking-tight">Exit penalty → Challenge pool</h3>
+          <h3 className="mt-2 text-[20px]">Exit penalty → Challenge pool</h3>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">Leave early and you pay up to 20% of what's still locked. It doesn't go to a treasury. It goes to the pool that pays the people who held. Defection subsidises coordination.</p>
           <div className="mt-6 rounded-xl bg-paper border border-line p-4 font-mono text-[11px] leading-loose text-ink-2">
             <div>
@@ -62,7 +61,7 @@ export function Mechanics() {
 
         <motion.div {...reveal(2)} className="card p-6 sm:p-7 flex flex-col">
           <div className="pixel text-accent text-[13px]">03</div>
-          <h3 className="mt-2 text-[20px] tracking-tight">NEAR-staking boost</h3>
+          <h3 className="mt-2 text-[20px]">NEAR-staking boost</h3>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">At claim time the vault reads your staked balance from a whitelisted staking pool and multiplies your pool share. Memecoin activity becomes NEAR staking demand.</p>
           <div className="mt-6 divide-y divide-line border-y border-line">
             <div className="flex justify-between py-1.5 text-[12px] text-ink-2">
@@ -78,6 +77,6 @@ export function Mechanics() {
           </div>
         </motion.div>
       </div>
-    </section>
+    </Reveal>
   );
 }

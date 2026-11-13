@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import { Reveal, SectionIntro } from "./Reveal";
 
 const STEPS = [
   {
@@ -57,15 +58,8 @@ export function HowItWorks() {
   const line = useTransform(scrollYProgress, [0, 1], ["0%", "100%"]);
 
   return (
-    <section id="how" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32 scroll-mt-20">
-      <div className="grid md:grid-cols-[1fr_360px] gap-8 items-end">
-        <h2 className="text-[clamp(28px,4.4vw,48px)] leading-[1.06] tracking-tight">
-          <span className="text-ink">How it works.</span>
-          <br />
-          <span className="text-ink-3">Three steps, one contract.</span>
-        </h2>
-        <p className="text-[13.5px] leading-relaxed text-ink-2">Everything runs in a single NEAR smart contract. Deposits enter through the token's own transfer call, so there is no approval step and nothing to trust but the code.</p>
-      </div>
+    <Reveal id="how" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">
+      <SectionIntro title="How it works." ghost="Three steps, one contract." text="Everything runs in a single NEAR smart contract. Deposits enter through the token's own transfer call, so there is no approval step and nothing to trust but the code." />
 
       <div ref={ref} className="relative mt-14 grid md:grid-cols-[48px_1fr] gap-6">
         <div className="hidden md:block relative">
@@ -77,7 +71,7 @@ export function HowItWorks() {
             <motion.div key={s.n} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.6, delay: i * 0.05 }} className="card grid sm:grid-cols-[1fr_220px] gap-6 p-6 sm:p-8">
               <div>
                 <div className="pixel text-accent text-[13px]">{s.n}</div>
-                <h3 className="mt-2 text-[22px] tracking-tight text-ink">{s.t}</h3>
+                <h3 className="mt-2 text-[22px] text-ink">{s.t}</h3>
                 <p className="mt-3 text-[14px] leading-relaxed text-ink-2 max-w-[520px]">{s.d}</p>
               </div>
               <div className="rounded-xl bg-paper border border-line p-4 flex items-center">{s.art}</div>
@@ -85,6 +79,6 @@ export function HowItWorks() {
           ))}
         </div>
       </div>
-    </section>
+    </Reveal>
   );
 }

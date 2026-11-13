@@ -14,7 +14,7 @@
   --color-ok: #2f7d4f;
   --color-bad: #b23b2a;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-pixel: "Silkscreen", "Courier New", monospace;
+  --font-pixel: "Doto", "Courier New", monospace;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -28,8 +28,33 @@ html {
 
 body {
   @apply bg-paper text-ink font-sans antialiased;
-  font-weight: 300;
+  font-weight: 400;
   font-feature-settings: "ss01", "cv11";
+}
+
+h1, h2, h3 {
+  font-weight: 500;
+  letter-spacing: -0.022em;
+}
+
+.h-display {
+  font-size: clamp(30px, 4.2vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-weight: 500;
+}
+
+.h-hero {
+  font-size: clamp(40px, 5.6vw, 66px);
+  line-height: 1.0;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+
+.lede {
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--color-ink-2);
 }
 
 ::selection {
@@ -39,8 +64,10 @@ body {
 
 .pixel {
   font-family: var(--font-pixel);
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   line-height: 1;
+  font-variation-settings: "ROND" 100;
 }
 
 .hairline {

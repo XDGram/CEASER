@@ -10,7 +10,6 @@ export function Footer() {
           <div className="flex items-center gap-2.5">
             <Mark size={20} />
             <span className="text-[13px] font-medium">CEASER</span>
-            <span className="pill">NEAR testnet</span>
           </div>
           <p className="mt-3 max-w-[420px] text-[12.5px] leading-relaxed text-ink-2">
             Built for the NEAR Hackathon 2026. The price oracle is a mock with real TWAP semantics. Do not use with real value.

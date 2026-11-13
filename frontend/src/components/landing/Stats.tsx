@@ -1,6 +1,7 @@
 import { motion, useInView, useMotionValue, useSpring } from "framer-motion";
 import { useEffect, useRef } from "react";
 import { useProtocol } from "../../lib/protocol";
+import { Reveal } from "./Reveal";
 import { useWallet } from "../../lib/wallet";
 import { EnterButton } from "../Nav";
 import { CONFIG } from "../../config";
@@ -38,7 +39,7 @@ export function Stats() {
   ];
 
   return (
-    <section className="mx-auto max-w-[1180px] px-4 sm:px-6">
+    <Reveal className="mx-auto max-w-[1180px] px-4 sm:px-6">
       <div className="card overflow-hidden grid grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1.2fr]">
         {cells.map((c, i) => (
           <motion.div
@@ -62,6 +63,6 @@ export function Stats() {
           {!accountId && <EnterButton className="btn btn-primary self-start" />}
         </div>
       </div>
-    </section>
+    </Reveal>
   );
 }

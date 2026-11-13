@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
 import { EnterButton } from "../Nav";
 import { Halftone } from "../Halftone";
+import { Reveal } from "./Reveal";
 
 export function Closing() {
   return (
-    <section className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">
+    <Reveal className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">
       <div className="relative card overflow-hidden p-8 sm:p-14 text-center">
         <Halftone seed={7} cols={90} rows={24} className="absolute inset-0 w-full h-full opacity-60 pointer-events-none" />
         <div className="relative">
@@ -24,6 +25,6 @@ export function Closing() {
           </motion.div>
         </div>
       </div>
-    </section>
+    </Reveal>
   );
 }
