@@ -16,8 +16,15 @@ export interface Toast {
   hash?: string | null;
 }
 
+export interface ReturnedTx {
+  hash: string | null;
+  error: string | null;
+}
+
 interface WalletCtx {
   ready: boolean;
+  /** Result MyNearWallet put in the URL when it redirected back, if any. */
+  returnedTx: ReturnedTx | null;
   accountId: string | null;
   connect: () => void;
   disconnect: () => Promise<void>;
@@ -34,6 +41,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const modalRef = useRef<WalletSelectorModal | null>(null);
   const [ready, setReady] = useState(false);
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [returnedTx, setReturnedTx] = useState<ReturnedTx | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
 
@@ -68,8 +76,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const url = new URL(window.location.href);
         const h = url.searchParams.get("transactionHashes");
         const err = url.searchParams.get("errorMessage");
-        if (h) toast("Transaction confirmed", "ok", h.split(",")[0]);
-        if (err) toast(decodeURIComponent(err), "err");
+        const pendingLock = (() => {
+          try {
+            return sessionStorage.getItem("ceaser:pending-lock") !== null;
+          } catch {
+            return false;
+          }
+        })();
+        if (h || err) setReturnedTx({ hash: h ? h.split(",")[0] : null, error: err ? decodeURIComponent(err) : null });
+        if (h && !pendingLock) toast("Transaction confirmed", "ok", h.split(",")[0]);
+        if (err && !pendingLock) toast(decodeURIComponent(err), "err");
         if (h || err || url.searchParams.has("account_id")) {
           ["transactionHashes", "errorMessage", "errorCode", "account_id", "public_key", "all_keys"].forEach((k) => url.searchParams.delete(k));
           window.history.replaceState({}, "", url.pathname + url.search + url.hash);
@@ -107,8 +123,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ ready, accountId, connect, disconnect, call, toasts, toast, dismiss }),
-    [ready, accountId, connect, disconnect, call, toasts, toast, dismiss],
+    () => ({ ready, returnedTx, accountId, connect, disconnect, call, toasts, toast, dismiss }),
+    [ready, returnedTx, accountId, connect, disconnect, call, toasts, toast, dismiss],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

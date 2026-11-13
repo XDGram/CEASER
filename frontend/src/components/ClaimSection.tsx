@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
 import { decodeResult, fmtDate, fmtDur, fromUnits, mult, nowTs, pct, view } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
@@ -31,8 +32,12 @@ function trancheStatus(t: Tranche, lock: Lock, cooldown: number): { label: strin
   return { label: "not met", cls: "tag-muted" };
 }
 
-function LockCard({ lock }: { lock: Lock }) {
+function LockCard({ lock, highlight = false }: { lock: Lock; highlight?: boolean }) {
   const { meta, config, refresh, refreshUser, challenges } = useProtocol();
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlight) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlight]);
   const { call, toast } = useWallet();
   const tm = meta(lock.token);
   const [busy, setBusy] = useState<string | null>(null);
@@ -64,11 +69,20 @@ function LockCard({ lock }: { lock: Lock }) {
   const committed = challenge?.state === "active";
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-30px" }} transition={{ duration: 0.45 }} className="card p-5 sm:p-6">
+    <motion.div
+      ref={cardRef}
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-30px" }}
+      transition={{ duration: 0.45 }}
+      animate={highlight ? { boxShadow: ["0 0 0 0 rgba(47,125,79,0)", "0 0 0 6px rgba(47,125,79,0.25)", "0 0 0 0 rgba(47,125,79,0)"] } : undefined}
+      className={`card p-5 sm:p-6 ${highlight ? "border-ok" : ""}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-mono text-ink-3">
-            Lock #{lock.id} · {fmtDate(lock.start_ts)}
+            Lock #{lock.id}
+            {highlight && <span className="ml-2 tag tag-ok">just locked</span>} · {fmtDate(lock.start_ts)}
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="pixel text-[24px]">{fromUnits(remaining, tm.decimals, 0)}</span>
@@ -166,7 +180,9 @@ function LockCard({ lock }: { lock: Lock }) {
 export function ClaimSection() {
   const { accountId, connect } = useWallet();
   const { locks, boostBps, refreshUser } = useProtocol();
-  const open = locks.filter((l) => l.status === "active");
+  const [params] = useSearchParams();
+  const newId = Number(params.get("new") ?? 0);
+  const open = locks.filter((l) => l.status === "active").sort((a, b) => (a.id === newId ? -1 : b.id === newId ? 1 : 0));
   const done = locks.filter((l) => l.status !== "active");
 
   return (
@@ -192,7 +208,7 @@ export function ClaimSection() {
       />
       <div className="mt-6 grid lg:grid-cols-2 gap-4">
         {open.map((l) => (
-          <LockCard key={l.id} lock={l} />
+          <LockCard key={l.id} lock={l} highlight={l.id === newId} />
         ))}
         {accountId && !locks.length && <div className="card p-8 text-[13px] text-ink-2 lg:col-span-2">No locks yet for this account. Create one above.</div>}
         {!accountId && <div className="card p-8 text-[13px] text-ink-2 lg:col-span-2">Connect a wallet to see your locks.</div>}

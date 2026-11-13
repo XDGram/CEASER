@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { LockProgress, type LockStage } from "./LockProgress";
+import { view } from "../lib/near";
 import { CONFIG } from "../config";
 import { datetimeToTs, fromUnits, localDatetimeValue, mult, pct, toUnits } from "../lib/near";
+import type { Lock } from "../lib/types";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Strategy } from "../lib/types";
@@ -21,8 +24,11 @@ const DEFAULT_RUNGS: Rung[] = [
 ];
 
 export function LockSection() {
-  const { accountId, call, toast } = useWallet();
+  const { accountId, call, toast, returnedTx } = useWallet();
   const { challenges, pools, config, meta, balance, refresh, refreshUser, boostBps, staked, tiers } = useProtocol();
+  const navigate = useNavigate();
+  const [stage, setStage] = useState<LockStage | null>(null);
+  const [stageLabel, setStageLabel] = useState("");
   const token = CONFIG.contracts.token;
   const tm = meta(token);
 
@@ -94,16 +100,89 @@ export function LockSection() {
     }
   }, [kind, endAt, rungs, challengeId, days, penalty, sinkKind, sinkChallenge, sinkAccount, pool, maxPenalty]);
 
+  // Waits for a lock newer than `sinceCount` owned by the user. A deposit the
+  // contract refunded (bad params) never produces one, so this times out.
+  const awaitNewLock = async (sinceCount: number): Promise<Lock | null> => {
+    if (!accountId) return null;
+    for (let i = 0; i < 12; i++) {
+      const locks = await view<Lock[]>(CONFIG.contracts.vault, "get_locks_by_owner", { account_id: accountId, from_index: 0, limit: 50 }).catch(() => [] as Lock[]);
+      const fresh = locks.filter((l) => l.id > sinceCount).sort((a, b) => b.id - a.id)[0];
+      if (fresh) return fresh;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return null;
+  };
+
+  const finish = async (sinceCount: number, hash: string | null | undefined, label: string) => {
+    setStage({ kind: "confirming", hash });
+    const lock = await awaitNewLock(sinceCount);
+    await Promise.all([refresh(), refreshUser()]);
+    if (!lock) {
+      setStage({ kind: "failed", reason: "The vault did not accept this deposit, so the tokens were refunded to you. Check the strategy and the Challenge rules and try again.", hash });
+      return;
+    }
+    setStage({ kind: "done", lockId: lock.id, hash });
+    setAmount("");
+    window.setTimeout(() => navigate(`/app/locks?new=${lock.id}`), 1400);
+    void label;
+  };
+
+  // Resume after a MyNearWallet redirect.
+  useEffect(() => {
+    let pending: { sinceCount: number; label: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem("ceaser:pending-lock");
+      pending = raw ? JSON.parse(raw) : null;
+    } catch {
+      pending = null;
+    }
+    if (!pending || !returnedTx || !accountId) return;
+    try {
+      sessionStorage.removeItem("ceaser:pending-lock");
+    } catch {
+      /* ignore */
+    }
+    setStageLabel(pending.label);
+    if (returnedTx.error) {
+      setStage({ kind: "failed", reason: returnedTx.error, hash: null });
+      return;
+    }
+    void finish(pending.sinceCount, returnedTx.hash, pending.label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnedTx, accountId]);
+
   const submit = async () => {
     if (!msg.ok) return toast(msg.error, "err");
     setBusy(true);
+    let sinceCount = 0;
+    const label = `${amount.trim()} ${tm.symbol}`;
     try {
       const units = toUnits(amount, tm.decimals);
       if (balance !== null && BigInt(units) > balance) throw new Error(`You hold ${fromUnits(balance, tm.decimals)} ${tm.symbol}`);
-      await call(token, "ft_transfer_call", { receiver_id: CONFIG.contracts.vault, amount: units, msg: JSON.stringify(msg.value) }, CONFIG.gas.ftTransferCall, CONFIG.oneYocto);
-      setAmount("");
-      await Promise.all([refresh(), refreshUser()]);
+      sinceCount = await view<number>(CONFIG.contracts.vault, "get_lock_count").catch(() => 0);
+      setStageLabel(label);
+      setStage({ kind: "signing" });
+      try {
+        sessionStorage.setItem("ceaser:pending-lock", JSON.stringify({ sinceCount, label }));
+      } catch {
+        /* ignore */
+      }
+      const outcome = await call(token, "ft_transfer_call", { receiver_id: CONFIG.contracts.vault, amount: units, msg: JSON.stringify(msg.value) }, CONFIG.gas.ftTransferCall, CONFIG.oneYocto);
+      // Browser wallets redirect away before this resolves; in-page wallets land here.
+      try {
+        sessionStorage.removeItem("ceaser:pending-lock");
+      } catch {
+        /* ignore */
+      }
+      const hash = (outcome as { transaction?: { hash?: string } })?.transaction?.hash ?? null;
+      await finish(sinceCount, hash, label);
     } catch (e) {
+      try {
+        sessionStorage.removeItem("ceaser:pending-lock");
+      } catch {
+        /* ignore */
+      }
+      setStage(null);
       toast(errorText(e), "err");
     } finally {
       setBusy(false);
@@ -116,6 +195,9 @@ export function LockSection() {
     <section id="lock" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
       <SectionHead n="01" title="Create a lock" sub="Commit tokens behind a strategy your future self can't override." />
       <div className="mt-8 grid lg:grid-cols-[1fr_380px] gap-6 items-start [&>*]:min-w-0">
+        {stage ? (
+          <LockProgress stage={stage} label={stageLabel} onDismiss={() => setStage(null)} />
+        ) : (
         <div className="card p-6 sm:p-8">
           <div className="grid sm:grid-cols-2 gap-5">
             <label className="field sm:col-span-2">
@@ -266,6 +348,7 @@ export function LockSection() {
             <span className="text-[12px] text-ink-2">{msg.ok ? "ft_transfer_call · 1 yocto · 150 TGas" : msg.error}</span>
           </div>
         </div>
+        )}
 
         <aside className="flex flex-col gap-4 min-w-0">
           <div className="card p-5">
