@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { useWallet } from "../lib/wallet";
 import { markEnter } from "../lib/enter";
-import { short } from "../lib/near";
 import { Mark } from "./Mark";
 
 const links = [
@@ -11,12 +10,26 @@ const links = [
   ["Spec", "https://github.com/XDGram/CEASER/blob/main/INTERFACE.md"],
 ];
 
-export function EnterButton({ className = "btn btn-primary btn-sm", label }: { className?: string; label?: string }) {
+export function ButtonIcon({ dark = false }: { dark?: boolean }) {
+  return (
+    <span className={`inline-flex h-5 w-5 items-center justify-center rounded-[6px] ${dark ? "bg-ink text-paper" : "bg-white/20 text-white"}`}>
+      <Mark size={14} className="text-current" />
+    </span>
+  );
+}
+
+export function EnterButton({ className = "btn btn-primary btn-sm", label, icon = false }: { className?: string; label?: string; icon?: boolean }) {
   const { ready, accountId, connect } = useWallet();
+  const inner = (
+    <>
+      {icon && <ButtonIcon dark={!className.includes("btn-accent") && !className.includes("btn-primary")} />}
+      {label ?? (accountId ? "Open app" : "Connect wallet")}
+    </>
+  );
   if (accountId)
     return (
       <Link to="/app" className={className}>
-        {label ?? "Open app"}
+        {inner}
       </Link>
     );
   return (
@@ -28,30 +41,30 @@ export function EnterButton({ className = "btn btn-primary btn-sm", label }: { c
         connect();
       }}
     >
-      {label ?? "Connect wallet"}
+      {inner}
     </button>
   );
 }
 
 export function Nav() {
-  const { accountId } = useWallet();
   return (
     <header className="sticky top-0 z-40 bg-paper/85 backdrop-blur border-b border-line">
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2.5">
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 h-14 grid grid-cols-[1fr_auto_1fr] items-center">
+        <Link to="/" className="flex items-center gap-2.5 justify-self-start">
           <Mark size={22} />
           <span className="text-[13px] font-medium tracking-tight">CEASER</span>
         </Link>
-        <nav className="hidden md:flex items-center gap-7 text-[12.5px] text-ink-2">
+        <nav className="hidden md:flex items-center gap-8 text-[12.5px] text-ink-2 justify-self-center">
           {links.map(([label, href]) => (
             <a key={label} href={href} className="hover:text-ink transition-colors" target={href.startsWith("http") ? "_blank" : undefined} rel="noopener">
               {label}
             </a>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <span className="pill hidden sm:inline-flex">testnet</span>
-          {accountId && <span className="hidden sm:inline-flex pill border-ink text-ink normal-case tracking-normal">{short(accountId, 20)}</span>}
+        <div className="flex items-center gap-5 justify-self-end">
+          <a href="https://github.com/XDGram/CEASER" target="_blank" rel="noopener" className="hidden sm:inline text-[12.5px] text-ink-2 hover:text-ink">
+            GitHub
+          </a>
           <EnterButton />
         </div>
       </div>

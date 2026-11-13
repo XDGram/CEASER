@@ -56,7 +56,7 @@ export function Story() {
             <h2 className="h-display">
               <span className="text-ink">The bridge, step by step.</span>
               <br />
-              <span className="text-ink-3">Real numbers from the testnet demo.</span>
+              <span className="text-ink-3">Real numbers from the demo run.</span>
             </h2>
             <div className="hidden md:block">
               <div className="h-1 w-full rounded-full bg-paper-2 overflow-hidden">

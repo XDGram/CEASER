@@ -1,45 +1,68 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { EnterButton } from "../Nav";
+import { Mark } from "../Mark";
 
-/* A looping flow: a dumper exits, the penalty drops into the pool, the pool pays the stayer. */
-function FlowDiagram() {
-  const reduce = useReducedMotion();
-  const loop = { duration: 6, repeat: Infinity, ease: "easeInOut" as const };
-  const node = (x: number, y: number, label: string, sub: string, tone: "ink" | "accent" | "ok" = "ink") => (
+/* Hairline circuit around the central tile, as in the reference. 1000 x 300 canvas. */
+const LEFT = [
+  { label: "Lock", y: 60 },
+  { label: "ROI ladder", y: 150 },
+  { label: "Early exit", y: 240 },
+];
+const RIGHT = [
+  { label: "Challenge", y: 60 },
+  { label: "Sponsor pool", y: 150 },
+  { label: "NEAR boost", y: 240 },
+];
+
+function Pill({ x, y, label, anchor }: { x: number; y: number; label: string; anchor: "start" | "end" }) {
+  const w = label.length * 6.6 + 24;
+  const rx = anchor === "start" ? x : x - w;
+  return (
     <g>
-      <rect x={x - 70} y={y - 26} width="140" height="52" rx="12" fill="var(--color-surface)" stroke={tone === "accent" ? "var(--color-accent)" : tone === "ok" ? "var(--color-ok)" : "var(--color-line-2)"} />
-      <text x={x} y={y - 4} textAnchor="middle" fontFamily="var(--font-sans)" fontSize="12" fontWeight="500" fill="var(--color-ink)">
-        {label}
-      </text>
-      <text x={x} y={y + 13} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9.5" letterSpacing="0.06em" fill="var(--color-ink-2)">
-        {sub}
+      <rect x={rx} y={y - 11} width={w} height={22} rx={11} fill="var(--color-paper)" stroke="var(--color-line-2)" />
+      <text x={rx + w / 2} y={y + 3.5} textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9.5" letterSpacing="0.1em" fill="var(--color-ink-2)">
+        {label.toUpperCase()}
       </text>
     </g>
   );
+}
+
+function Circuit() {
+  const reduce = useReducedMotion();
+  const cx = 500;
+  const cy = 150;
+  const draw = {
+    hidden: { pathLength: reduce ? 1 : 0, opacity: reduce ? 1 : 0 },
+    show: (i: number) => ({ pathLength: 1, opacity: 1, transition: { pathLength: { duration: 1.2, delay: 0.3 + i * 0.1, ease: "easeInOut" as const }, opacity: { duration: 0.2, delay: 0.3 + i * 0.1 } } }),
+  };
+  const lines = [
+    ...LEFT.map((n, i) => ({ d: `M 60 ${n.y} H 330 Q 350 ${n.y} 350 ${n.y + (cy - n.y) * 0.45} V ${cy} H ${cx - 62}`, i, dotX: 60, dotY: n.y })),
+    ...RIGHT.map((n, i) => ({ d: `M 940 ${n.y} H 670 Q 650 ${n.y} 650 ${n.y + (cy - n.y) * 0.45} V ${cy} H ${cx + 62}`, i: i + 3, dotX: 940, dotY: n.y })),
+  ];
   return (
-    <svg viewBox="0 0 520 380" className="w-full h-auto" aria-label="Flow: a dumper's penalty goes into the Challenge pool and is paid to the holders who stayed">
-      <path id="p1" d="M 110 90 C 110 170, 260 150, 260 200" fill="none" stroke="var(--color-line-2)" strokeWidth="1.2" strokeDasharray="3 4" />
-      <path id="p2" d="M 260 226 C 260 290, 400 260, 400 300" fill="none" stroke="var(--color-line-2)" strokeWidth="1.2" strokeDasharray="3 4" />
-      <path d="M 400 90 C 400 150, 290 150, 274 186" fill="none" stroke="var(--color-line)" strokeWidth="1.2" />
-      {node(110, 90, "Dumper", "EXITS EARLY · 20% PENALTY", "accent")}
-      {node(400, 90, "Sponsor", "FUNDS THE POOL")}
-      {node(260, 200, "Challenge pool", "PENALTIES + SPONSORS", "ink")}
-      {node(400, 300, "Diamond hands", "PAID BY CONVICTION × BOOST", "ok")}
-      <g>
-        <rect x={60} y={286} width="130" height="30" rx="15" fill="var(--color-ink)" />
-        <text x={125} y={305} textAnchor="middle" fontFamily="var(--font-pixel)" fontSize="11" fill="var(--color-paper)">
-          NEAR STAKED 1.25X
-        </text>
-      </g>
-      <path d="M 190 301 H 330" fill="none" stroke="var(--color-line-2)" strokeWidth="1.2" strokeDasharray="3 4" />
-      {!reduce && (
-        <>
-          <motion.circle r="6" fill="var(--color-accent)" initial={{ offsetDistance: "0%" }} animate={{ offsetDistance: ["0%", "100%"], opacity: [0, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.1, 0.9, 1] }} style={{ offsetPath: "path('M 110 90 C 110 170, 260 150, 260 200')" }} />
-          <motion.circle r="6" fill="var(--color-ok)" initial={{ offsetDistance: "0%" }} animate={{ offsetDistance: ["0%", "100%"], opacity: [0, 1, 1, 0] }} transition={{ ...loop, delay: 3, times: [0, 0.1, 0.9, 1] }} style={{ offsetPath: "path('M 260 226 C 260 290, 400 260, 400 300')" }} />
-          <motion.circle cx={260} cy={200} r="86" fill="none" stroke="var(--color-accent)" strokeWidth="1" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: [0.6, 1.1], opacity: [0.35, 0] }} transition={{ duration: 2.4, repeat: Infinity, delay: 2.6, ease: "easeOut" }} style={{ transformOrigin: "260px 200px" }} />
-        </>
-      )}
+    <svg viewBox="0 0 1000 300" className="w-full h-auto" aria-hidden>
+      {lines.map((l) => (
+        <motion.path key={l.i} d={l.d} fill="none" stroke="var(--color-line-2)" strokeWidth="1" custom={l.i} variants={draw} initial="hidden" animate="show" />
+      ))}
+      {lines.map((l) => (
+        <motion.circle key={"d" + l.i} cx={l.dotX} cy={l.dotY} r="3" fill="var(--color-ink)" initial={{ scale: reduce ? 1 : 0 }} animate={{ scale: 1 }} transition={{ delay: 1.3 + l.i * 0.08 }} />
+      ))}
+      {LEFT.map((n) => (
+        <Pill key={n.label} x={170} y={n.y} label={n.label} anchor="start" />
+      ))}
+      {RIGHT.map((n) => (
+        <Pill key={n.label} x={830} y={n.y} label={n.label} anchor="end" />
+      ))}
+      <motion.g initial={{ scale: reduce ? 1 : 0.88, opacity: reduce ? 1 : 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.7, ease: "easeOut" }} style={{ transformOrigin: "500px 150px" }}>
+        <rect x={cx - 62} y={cy - 62} width="124" height="124" rx="24" fill="var(--color-paper-2)" stroke="var(--color-line)" />
+        <rect x={cx - 48} y={cy - 48} width="96" height="96" rx="20" fill="var(--color-surface)" stroke="var(--color-line)" />
+        <foreignObject x={cx - 28} y={cy - 28} width="56" height="56">
+          <div className="w-full h-full flex items-center justify-center text-ink">
+            <Mark size={48} />
+          </div>
+        </foreignObject>
+      </motion.g>
     </svg>
   );
 }
@@ -48,53 +71,28 @@ export function Hero() {
   const ref = useRef<HTMLElement>(null);
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const y = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -80]);
-  const opacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1, reduce ? 1 : 0.94]);
-
-  const up = (delay: number) => ({ initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.7, delay, ease: "easeOut" as const } });
+  const y = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60]);
+  const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
+  const fade = (delay: number) => ({ initial: { opacity: 0, y: reduce ? 0 : 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.7, delay } });
 
   return (
     <section ref={ref} id="top" className="relative">
-      <motion.div style={{ y, opacity, scale }} className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-16 sm:pt-24 pb-14 grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center">
-        <div>
-          <motion.span {...up(0)} className="pill">
-            Memecoins with mechanics · NEAR Hackathon 2026
-          </motion.span>
-          <motion.h1 {...up(0.08)} className="mt-6 h-hero text-ink">
-            Lock your memecoin.
-            <br />
-            <span className="text-ink-3">Get paid when</span> others dump.
-          </motion.h1>
-          <motion.p {...up(0.18)} className="mt-7 max-w-[500px] lede">
-            CEASER is a commitment protocol on NEAR. Hold your bag to the targets you set, join your community's Challenge, and collect the exit penalties of everyone who sold early. Stake NEAR and your share gets multiplied.
-          </motion.p>
-          <motion.div {...up(0.28)} className="mt-8 flex flex-wrap items-center gap-3">
-            <EnterButton className="btn btn-accent" label={undefined} />
-            <a href="#how" className="btn btn-outline">
-              How it works
-            </a>
-          </motion.div>
-          <motion.div {...up(0.4)} className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-[12px] text-ink-2">
-            <span>
-              <span className="pixel text-ink text-[14px]">01</span> ROI-laddered unlocks
-            </span>
-            <span>
-              <span className="pixel text-ink text-[14px]">02</span> Exit penalties fund the pool
-            </span>
-            <span>
-              <span className="pixel text-ink text-[14px]">03</span> NEAR staking boost
-            </span>
-          </motion.div>
+      <motion.div style={{ y, opacity }} className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-20 sm:pt-28 pb-12 text-center">
+        <motion.h1 {...fade(0.05)} className="h-hero pixel text-ink">
+          LOCK. HOLD.
+        </motion.h1>
+        <div className="mx-auto mt-6 sm:mt-10 max-w-[980px]">
+          <Circuit />
         </div>
-        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.9, delay: 0.25 }} className="card p-4 sm:p-6">
-          <FlowDiagram />
+        <motion.h1 {...fade(1.2)} className="h-hero pixel text-ink mt-6 sm:mt-10">
+          GET PAID.
+        </motion.h1>
+        <motion.p {...fade(1.4)} className="mx-auto mt-7 max-w-[460px] text-[14.5px] leading-relaxed text-ink-2">
+          CEASER is a commitment protocol on NEAR. Lock your memecoin, join your community's Challenge, and collect the penalties of everyone who dumped early.
+        </motion.p>
+        <motion.div {...fade(1.6)} className="mt-9 flex justify-center">
+          <EnterButton className="btn btn-accent" icon />
         </motion.div>
-      </motion.div>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }} className="flex justify-center pb-6">
-        <motion.span animate={reduce ? {} : { y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity }} className="text-[10px] font-mono uppercase tracking-[0.2em] text-ink-3">
-          scroll
-        </motion.span>
       </motion.div>
     </section>
   );

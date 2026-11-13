@@ -5,6 +5,7 @@ import { takeEnter } from "../lib/enter";
 import { Nav } from "../components/Nav";
 import { Hero } from "../components/landing/Hero";
 import { Stats } from "../components/landing/Stats";
+import { Intro, Statement } from "../components/landing/Intro";
 import { Story } from "../components/landing/Story";
 import { HowItWorks } from "../components/landing/HowItWorks";
 import { Mechanics } from "../components/landing/Mechanics";
@@ -28,9 +29,11 @@ export function Landing() {
       <main className="overflow-x-clip">
         <Hero />
         <Stats />
+        <Intro />
         <Story />
         <HowItWorks />
         <Mechanics />
+        <Statement />
         <WhoFor />
         <Defenses />
         <LiveChallenges />

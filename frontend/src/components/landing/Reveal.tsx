@@ -20,14 +20,14 @@ export function Reveal({ children, className = "", id }: { children: ReactNode; 
 
 export function SectionIntro({ title, ghost, text, action }: { title: string; ghost: string; text?: string; action?: ReactNode }) {
   return (
-    <div className="grid md:grid-cols-[1fr_340px] gap-x-12 gap-y-6 items-end">
+    <div className="grid md:grid-cols-[1fr_320px] gap-x-16 gap-y-6 items-end">
       <h2 className="h-display">
         <span className="text-ink">{title}</span>
         <br />
         <span className="text-ink-3">{ghost}</span>
       </h2>
       <div className="md:justify-self-end w-full">
-        {text && <p className="text-[14px] leading-relaxed text-ink-2">{text}</p>}
+        {text && <p className="text-[13.5px] leading-relaxed text-ink-2">{text}</p>}
         {action && <div className="mt-4">{action}</div>}
       </div>
     </div>

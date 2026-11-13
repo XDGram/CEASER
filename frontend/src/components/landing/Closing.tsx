@@ -15,10 +15,10 @@ export function Closing() {
             DIAMOND HANDS.
           </motion.h2>
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.2, duration: 0.7 }} className="mx-auto mt-5 max-w-[440px] text-[14px] leading-relaxed text-ink-2">
-            Connect a NEAR testnet wallet, lock some CSTEST, and watch the mechanic work end to end in minutes.
+            Connect a NEAR wallet, lock some CSTEST, and watch the mechanic work end to end in minutes.
           </motion.p>
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.3, duration: 0.7 }} className="mt-8 flex flex-wrap justify-center gap-3">
-            <EnterButton className="btn btn-accent" />
+            <EnterButton className="btn btn-accent" icon />
             <a href="https://github.com/XDGram/CEASER" target="_blank" rel="noopener" className="btn btn-outline">
               View the code
             </a>

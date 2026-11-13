@@ -20,7 +20,7 @@ export function LiveChallenges() {
   return (
     <Reveal id="live" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">
       <SectionIntro
-        title="Live on testnet."
+        title="Live right now."
         ghost="Read straight from the vault."
         text={`${challenges.length} Challenge${challenges.length === 1 ? "" : "s"} on the vault so far. One of them, exactly as the contract reports it.`}
         action={accountId ? <Link to="/app/challenges" className="btn btn-outline btn-sm">All Challenges</Link> : <EnterButton className="btn btn-outline btn-sm" label="Connect to join" />}

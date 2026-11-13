@@ -56,7 +56,7 @@ export function AppShell() {
       <main className="flex-1 pb-20">
         <Outlet />
       </main>
-      <footer className="border-t border-line py-5 text-center text-[11px] font-mono text-ink-3">CEASER · NEAR testnet · mock oracle · not for real value</footer>
+      <footer className="border-t border-line py-5 text-center text-[11px] font-mono text-ink-3">CEASER · mock oracle · not for real value</footer>
     </div>
   );
 }
