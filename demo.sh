@@ -22,13 +22,14 @@ head1 "Checking prerequisites"
 check_prereqs
 
 # A usable deployment needs scripts/deployed.json, a local key for each of its
-# accounts (demo.sh signs as the oracle, pool, token and vault) and the
-# accounts to exist on testnet. Anything else means: deploy afresh.
+# accounts (demo.sh signs as the oracle, pool, token and the treasury, which
+# owns the vault) and the accounts to exist on testnet. Anything else means:
+# deploy afresh.
 needs_deploy=""
 if [ ! -f scripts/deployed.json ]; then
   needs_deploy="scripts/deployed.json is missing"
 else
-  for role in vault oracle token staking_pool; do
+  for role in vault oracle token staking_pool treasury; do
     acct=$(jq -r ".$role // empty" scripts/deployed.json 2>/dev/null || true)
     if [ -z "$acct" ]; then needs_deploy="scripts/deployed.json has no \"$role\" entry"; break; fi
     if ! have_key "$acct"; then needs_deploy="no key for the $role account $acct in $CREDENTIALS_DIR"; break; fi
@@ -48,6 +49,7 @@ VAULT=$(jq -r .vault scripts/deployed.json)
 ORACLE=$(jq -r .oracle scripts/deployed.json)
 TOKEN=$(jq -r .token scripts/deployed.json)
 POOL=$(jq -r .staking_pool scripts/deployed.json)
+TREASURY=$(jq -r .treasury scripts/deployed.json)
 DEADLINE_SEC="${DEADLINE_SEC:-150}"
 
 A_AMOUNT=$(tok 100000)   # 100k CSTEST
@@ -72,6 +74,7 @@ say "  vault        $VAULT"
 say "  oracle       $ORACLE"
 say "  token        $TOKEN"
 say "  staking pool $POOL"
+say "  treasury     $TREASURY (vault owner)"
 
 head1 "Setup: users, tokens, stake, oracle, Challenge C1"
 SUFFIX=$(rand_suffix)
@@ -102,7 +105,7 @@ fi
 assert_eq "oracle TWAP($TWAP_WINDOW s) at \$1.00" "$(twap)" "$PRICE_1"
 
 DEADLINE=$(( $(now_ts) + DEADLINE_SEC ))
-tx "$VAULT" "$VAULT" create_challenge "$(j --arg t "$TOKEN" --arg th "$THRESHOLD" --argjson d "$DEADLINE" \
+tx "$TREASURY" "$VAULT" create_challenge "$(j --arg t "$TOKEN" --arg th "$THRESHOLD" --argjson d "$DEADLINE" \
   '{params:{title:"Hold the line",token:$t,threshold_amount:$th,deadline_ts:$d,min_lock_duration_sec:5,sponsor_token:$t,boost_reserve_bps:2000}}')" '30 Tgas' '0 NEAR'
 CID=$(tx_value)
 show_events

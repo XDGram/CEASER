@@ -71,9 +71,8 @@ assert_eq "vault registered on token" \
 assert_eq "treasury registered on token" \
   "$(view "$TOKEN" storage_balance_of "$(jq -nc --arg a "$TREASURY" '{account_id:$a}')" | jq -r 'if . == null then "no" else "yes" end')" "yes"
 
-jq -n --arg v "$VAULT" --arg o "$ORACLE" --arg t "$TOKEN" --arg p "$POOL" \
-  '{network:"testnet",vault:$v,oracle:$o,token:$t,staking_pool:$p}' > scripts/deployed.json
+jq -n --arg v "$VAULT" --arg o "$ORACLE" --arg t "$TOKEN" --arg p "$POOL" --arg r "$TREASURY" \
+  '{network:"testnet",vault:$v,oracle:$o,token:$t,staking_pool:$p,treasury:$r}' > scripts/deployed.json
 head1 "Done"
 cat scripts/deployed.json
-say "  vault owner / treasury: $TREASURY"
 say "  keys are in ~/.near-credentials/testnet/. Next: ./demo.sh"
