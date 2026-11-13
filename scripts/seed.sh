@@ -14,8 +14,10 @@ source scripts/lib.sh
 VAULT=$(jq -r .vault scripts/deployed.json)
 TOKEN=$(jq -r .token scripts/deployed.json)
 POOL=$(jq -r .staking_pool scripts/deployed.json)
-GAS_CALL=100000000000000
-GAS_FT=150000000000000
+GAS_CALL="100 Tgas"
+GAS_FT="150 Tgas"
+NONE="0 NEAR"
+YOCTO="1 yoctoNEAR"
 SFX=$(rand_suffix)
 
 head1 "Seeding $VAULT"
@@ -29,7 +31,7 @@ for n in "${NAMES[@]}"; do
   create_account "${ACC[$n]}"
 done
 for n in "${NAMES[@]}"; do
-  tx "${ACC[$n]}" "$TOKEN" mint "$(jq -nc --arg a "${ACC[$n]}" --arg x "$(tok 5000000)" '{account_id:$a,amount:$x}')" 30000000000000 0
+  tx "${ACC[$n]}" "$TOKEN" mint "$(jq -nc --arg a "${ACC[$n]}" --arg x "$(tok 5000000)" '{account_id:$a,amount:$x}')" '30 Tgas' "$NONE"
 done
 
 mk_challenge() { # creator title threshold deadline_offset_sec min_lock_sec -> id
@@ -37,28 +39,33 @@ mk_challenge() { # creator title threshold deadline_offset_sec min_lock_sec -> i
   tx "$creator" "$VAULT" create_challenge "$(jq -nc --arg t "$title" --arg tok "$TOKEN" --arg th "$(tok "$threshold")" \
        --argjson dl "$(( $(now_ts) + offset ))" --argjson ml "$minlock" \
        '{params:{title:$t,token:$tok,threshold_amount:$th,deadline_ts:$dl,min_lock_duration_sec:$ml,sponsor_token:$tok,boost_reserve_bps:2000}}')" \
-     30000000000000 0
+     '30 Tgas' "$NONE" >&2
   tx_value
 }
 sponsor() { # who cid amount
-  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "{\"sponsor\":{\"challenge_id\":$2}}" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" 1
+  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "{\"sponsor\":{\"challenge_id\":$2}}" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" "$YOCTO"
 }
 lock_in() { # who cid amount days penalty_bps [staking_pool]
   local pool=${6:-null}; [ "$pool" = null ] || pool="\"$pool\""
   local msg="{\"lock\":{\"strategy\":{\"collective_threshold\":{\"challenge_id\":$2}},\"max_duration_sec\":$(( $4 * 86400 )),\"penalty_bps\":$5,\"penalty_sink\":null,\"challenge_id\":$2,\"staking_pool\":$pool}}"
-  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "$msg" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" 1
+  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "$msg" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" "$YOCTO"
 }
 lock_ladder() { # who cid_sink amount days
   local msg="{\"lock\":{\"strategy\":{\"roi_ladder\":{\"tranches\":[{\"fraction_bps\":5000,\"multiplier_bps\":15000},{\"fraction_bps\":2500,\"multiplier_bps\":20000},{\"fraction_bps\":2500,\"multiplier_bps\":30000}]}},\"max_duration_sec\":$(( $4 * 86400 )),\"penalty_bps\":2000,\"penalty_sink\":{\"challenge\":$2},\"challenge_id\":null,\"staking_pool\":null}}"
-  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "$msg" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" 1
+  tx "$1" "$TOKEN" ft_transfer_call "$(jq -nc --arg r "$VAULT" --arg a "$(tok "$3")" --arg m "$msg" '{receiver_id:$r,amount:$a,msg:$m}')" "$GAS_FT" "$YOCTO"
 }
 last_lock_id() { view "$VAULT" get_lock_count '{}' | jq -r .; }
 
 head1 "Challenges"
+if [ -n "${SEED_IDS:-}" ]; then
+  # Reuse Challenges from an earlier run: SEED_IDS="4 5 6 7"
+  read -r C1 C2 C3 C4 <<<"$SEED_IDS"
+else
 C1=$(mk_challenge "${ACC[chad]}"   "Diamond hands season: 2M CSTEST by Sunday" 2000000 $((6*86400))  86400)
 C2=$(mk_challenge "${ACC[frog]}"   "No paper hands until the listing"          1000000 $((12*86400)) 172800)
 C3=$(mk_challenge "${ACC[whale]}"  "Founder allocation, locked in public"       500000  $((30*86400)) 604800)
 C4=$(mk_challenge "${ACC[hodler]}" "Hold through the dip"                       250000  $((3*86400))  3600)
+fi
 say "created challenges $C1 $C2 $C3 $C4"
 
 head1 "Sponsors"
@@ -81,8 +88,8 @@ lock_in "${ACC[frog]}"   "$C4" 60000  4  2000
 lock_ladder "${ACC[chad]}" "$C1" 250000 60
 
 head1 "Paper hands"
-tx "${ACC[degen]}" "$VAULT" early_exit "{\"lock_id\":$DEGEN_C1}" "$GAS_CALL" 0
-tx "${ACC[degen]}" "$VAULT" early_exit "{\"lock_id\":$DEGEN_C2}" "$GAS_CALL" 0
+tx "${ACC[degen]}" "$VAULT" early_exit "{\"lock_id\":$DEGEN_C1}" "$GAS_CALL" "$NONE"
+tx "${ACC[degen]}" "$VAULT" early_exit "{\"lock_id\":$DEGEN_C2}" "$GAS_CALL" "$NONE"
 
 head1 "Result"
 for c in $C1 $C2 $C3 $C4; do
