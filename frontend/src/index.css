@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f3f1ec;
+  --color-paper-2: #ebe8e1;
+  --color-surface: #ffffff;
+  --color-ink: #141414;
+  --color-ink-2: #6f6c66;
+  --color-ink-3: #a3a09a;
+  --color-line: #dcd9d2;
+  --color-line-2: #c9c5bc;
+  --color-accent: #e8622a;
+  --color-accent-2: #c84f1c;
+  --color-ok: #2f7d4f;
+  --color-bad: #b23b2a;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-pixel: "Doto", "Courier New", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+  font-weight: 400;
+  font-feature-settings: "ss01", "cv11";
+}
+
+h1, h2, h3 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.h-display {
+  font-size: clamp(30px, 4.3vw, 50px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-weight: 400;
+}
+
+.h-hero {
+  font-size: clamp(36px, 6.4vw, 78px);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.lede {
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--color-ink-2);
+}
+
+::selection {
+  background: #141414;
+  color: #f3f1ec;
+}
+
+.pixel {
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-variation-settings: "ROND" 100;
+}
+
+.hairline {
+  border: 1px solid var(--color-line);
+}
+
+.card {
+  @apply bg-surface rounded-2xl border border-line;
+}
+
+.field {
+  @apply flex flex-col gap-1.5;
+}
+.field > span {
+  @apply text-[11px] uppercase tracking-[0.14em] text-ink-2 font-mono;
+}
+.input,
+select.input,
+textarea.input {
+  @apply w-full bg-paper rounded-lg border border-line px-3.5 py-2.5 text-[14px] text-ink font-normal outline-none transition;
+}
+.input:focus {
+  @apply border-ink bg-surface;
+}
+.input::placeholder {
+  @apply text-ink-3;
+}
+
+.btn {
+  @apply inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-medium transition-all select-none cursor-pointer whitespace-nowrap;
+}
+.btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+.btn-primary {
+  @apply bg-ink text-paper hover:bg-black;
+}
+.btn-accent {
+  @apply bg-accent text-white hover:bg-accent-2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.btn-outline {
+  @apply bg-transparent text-ink border border-line-2 hover:border-ink;
+}
+.btn-ghost {
+  @apply bg-transparent text-ink-2 hover:text-ink;
+}
+.btn-sm {
+  @apply px-3.5 py-1.5 text-[12px];
+}
+.btn-danger {
+  @apply bg-transparent text-bad border border-bad/30 hover:border-bad;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full border border-line-2 bg-surface px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-ink-2;
+}
+
+.tag {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium;
+}
+.tag-ok { @apply bg-ok/10 text-ok; }
+.tag-bad { @apply bg-bad/10 text-bad; }
+.tag-live { @apply bg-ink text-paper; }
+.tag-muted { @apply bg-paper-2 text-ink-2; }
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Wallet selector modal, restyled to the page. */
+.nws-modal-wrapper {
+  --wallet-selector-backdrop-bg: rgba(20, 20, 20, 0.5);
+  --wallet-selector-content-bg: #ffffff;
+  --wallet-selector-text-color: #141414;
+  --wallet-selector-selected-wallet-bg: #f3f1ec;
+  --wallet-selector-wallet-option-border-color: #dcd9d2;
+  --wallet-selector-heading-color: #141414;
+  --wallet-selector-sidebar-border-color: #dcd9d2;
+  --wallet-selector-close-button-bg-color: #f3f1ec;
+  --wallet-selector-close-button-fill-icon-color: #141414;
+  --wallet-selector-home-button-bg-color: #141414;
+  --wallet-selector-search-bg: #f3f1ec;
+  font-family: var(--font-sans);
+}
