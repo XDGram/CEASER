@@ -8,6 +8,8 @@
 NETWORK="testnet"
 RPC_URL="${NEAR_RPC_URL:-https://rpc.testnet.near.org}"
 ONE_YOCTO="1 yoctoNEAR"
+# Where near-cli-rs's legacy keychain keeps testnet keys (<account_id>.json).
+CREDENTIALS_DIR="${NEAR_CREDENTIALS_DIR:-$HOME/.near-credentials/$NETWORK}"
 
 # --- output ---------------------------------------------------------------
 
@@ -39,6 +41,39 @@ assert_lt() {
     die "$1: expected $2 < $3"
   fi
 }
+
+# --- prerequisites --------------------------------------------------------
+
+NEAR_CLI_INSTALL="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh"
+CARGO_NEAR_INSTALL="curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh"
+
+# check_prereqs: verifies every tool deploy.sh and demo.sh need and prints an
+# install hint for each missing one. Exits if anything is missing.
+check_prereqs() {
+  local missing=0
+  _miss() { printf '%s  ✘ %s%s\n      install: %s\n' "$C_RED" "$1" "$C_OFF" "$2" >&2; missing=1; }
+  _have() { printf '%s  ✔ %s%s\n' "$C_GREEN" "$1" "$C_OFF"; }
+
+  command -v jq >/dev/null 2>&1 && _have "jq" || _miss "jq not found" "apt-get install -y jq   (macOS: brew install jq)"
+  command -v curl >/dev/null 2>&1 && _have "curl" || _miss "curl not found" "apt-get install -y curl"
+  command -v python3 >/dev/null 2>&1 && _have "python3" || _miss "python3 not found" "apt-get install -y python3"
+  if command -v near >/dev/null 2>&1; then _have "near ($(near --version 2>/dev/null | tail -1))"
+  else _miss "near (near-cli-rs) not found" "$NEAR_CLI_INSTALL"; fi
+  if command -v rustup >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+    _have "cargo ($(cargo --version 2>/dev/null))"
+    if rustup target list --installed 2>/dev/null | grep -qx 'wasm32-unknown-unknown'; then _have "rustup target wasm32-unknown-unknown"
+    else _miss "rustup target wasm32-unknown-unknown not installed" "rustup target add wasm32-unknown-unknown"; fi
+    if cargo near --version >/dev/null 2>&1; then _have "cargo-near ($(cargo near --version 2>/dev/null | tail -1))"
+    else _miss "cargo-near not found" "$CARGO_NEAR_INSTALL"; fi
+  else
+    _miss "rustup/cargo not found" "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   then: rustup target add wasm32-unknown-unknown"
+    _miss "cargo-near not found (needs cargo)" "$CARGO_NEAR_INSTALL"
+  fi
+  [ "$missing" = 0 ] || die "missing prerequisites, see the install hints above"
+}
+
+# have_key ACCOUNT: true if the legacy keychain holds a key for the account.
+have_key() { [ -f "$CREDENTIALS_DIR/$1.json" ]; }
 
 # --- numbers --------------------------------------------------------------
 

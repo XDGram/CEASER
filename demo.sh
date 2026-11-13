@@ -8,14 +8,42 @@
 #   4. Oracle price advances; C1 deadline passes; finalize(C1) -> succeeded.
 #   5. User B claims: principal + boosted reward.
 #
-# Usage: ./demo.sh            (run scripts/deploy.sh first)
+# Usage: ./demo.sh
+#   Uses the deployment in scripts/deployed.json when this machine holds the
+#   keys for its accounts (~/.near-credentials/testnet/). Otherwise it runs
+#   scripts/deploy.sh first to create a fresh deployment.
 #   DEADLINE_SEC=150          seconds from challenge creation to its deadline
 set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=scripts/lib.sh
 source scripts/lib.sh
 
-[ -f scripts/deployed.json ] || die "scripts/deployed.json not found, run scripts/deploy.sh first"
+head1 "Checking prerequisites"
+check_prereqs
+
+# A usable deployment needs scripts/deployed.json, a local key for each of its
+# accounts (demo.sh signs as the oracle, pool, token and vault) and the
+# accounts to exist on testnet. Anything else means: deploy afresh.
+needs_deploy=""
+if [ ! -f scripts/deployed.json ]; then
+  needs_deploy="scripts/deployed.json is missing"
+else
+  for role in vault oracle token staking_pool; do
+    acct=$(jq -r ".$role // empty" scripts/deployed.json 2>/dev/null || true)
+    if [ -z "$acct" ]; then needs_deploy="scripts/deployed.json has no \"$role\" entry"; break; fi
+    if ! have_key "$acct"; then needs_deploy="no key for the $role account $acct in $CREDENTIALS_DIR"; break; fi
+    if ! account_exists "$acct"; then needs_deploy="the $role account $acct does not exist on testnet"; break; fi
+  done
+fi
+if [ -n "$needs_deploy" ]; then
+  head1 "No usable deployment: $needs_deploy"
+  say "  running scripts/deploy.sh to create a fresh one (about 2 minutes)"
+  scripts/deploy.sh
+  head1 "Fresh deployment ready, continuing with the demo"
+else
+  info "using the deployment in scripts/deployed.json (keys found in $CREDENTIALS_DIR)"
+fi
+
 VAULT=$(jq -r .vault scripts/deployed.json)
 ORACLE=$(jq -r .oracle scripts/deployed.json)
 TOKEN=$(jq -r .token scripts/deployed.json)

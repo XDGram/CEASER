@@ -22,6 +22,9 @@ PRICE_1="100000000"           # $1.00, 8 decimals
 LIQUIDITY="1000000000000"     # arbitrary, above any floor
 TOTAL_SUPPLY=$(tok 10000000)  # 10M CSTEST to the token account itself
 
+head1 "Checking prerequisites"
+check_prereqs
+
 head1 "Building contracts"
 ./build.sh >/dev/null
 for w in ceaser_vault mock_oracle test_token mock_staking_pool; do
