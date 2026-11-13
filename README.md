@@ -162,7 +162,7 @@ contracts/
   mock-oracle/        MockOracle: owner-set prices, real time-weighted TWAP, liquidity floor
   mock-staking-pool/  owner-set get_account_staked_balance, mirrors the core staking pool
 integration-tests/    near-workspaces sandbox tests (integration-tests/tests/flows.rs)
-frontend/             one-page app: index.html + config.js, no build step
+frontend/             Vite + React app (src/config.ts holds the contract ids)
 scripts/              testnet deploy script, shared helpers, deployed.json (live account ids)
 demo.sh               the scripted testnet demo arc
 INTERFACE.md          the binding spec for every method and JSON shape
@@ -242,36 +242,28 @@ Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracl
 
 ## Running the frontend
 
-`frontend/index.html` is a single page with no build step. It loads near-api-js
-and NEAR Wallet Selector (MyNearWallet, Meteor) from CDNs and talks to testnet
-directly.
-
-The hosted version is at https://ceaser-nine.vercel.app. To run it locally:
-
-1. `frontend/config.js` already points at the live testnet deployment above. To
-   use your own deployment, copy the ids from `scripts/deployed.json` into it.
-2. Serve the folder over HTTP (wallet redirects need a real origin):
+`frontend/` is a Vite + React + TypeScript app styled with Tailwind, using
+near-api-js and NEAR Wallet Selector (MyNearWallet, Meteor) on testnet. The
+hosted version is at https://ceaser-nine.vercel.app.
 
 ```bash
-cd frontend && python3 -m http.server 8080
+cd frontend && npm install && npm run dev
 ```
 
-3. Open http://localhost:8080 and connect a testnet wallet.
+`src/config.ts` points at the live deployment above. To use your own, copy the
+ids from `scripts/deployed.json` into it. `npm run build` writes `dist/`.
 
 The page has three sections that map one to one onto the spec:
 
 - **01 Create a lock.** Strategy picker (time, ROI ladder, collective
-  threshold), max duration, penalty, penalty sink, Challenge and staking pool.
-  Shows the exact `msg` JSON before sending `ft_transfer_call`.
+  threshold), max duration, penalty, penalty sink, Challenge and staking pool,
+  with a live preview of the exact `msg` sent in `ft_transfer_call` and your
+  NEAR boost tier.
 - **02 Challenges.** Every Challenge with progress toward its threshold, pool
   size, deadline and state. Join by locking, sponsor a pool, create a new
   Challenge, finalize after the deadline, refund a failed sponsorship.
-- **03 Claim.** Your locks with per-tranche status, `check_unlock` on price
-  tranches, `claim`, `early_exit`, and a NEAR boost badge computed from the
-  staking pool and `get_boost_tiers`.
-
-Amounts are converted with each token's `ft_metadata` decimals. Timestamps are
-shown as local dates.
+- **03 Your locks.** Per-tranche status, `check_unlock` on price tranches,
+  `claim` and `early_exit`.
 
 ## Roadmap: not shipped
 
@@ -287,8 +279,8 @@ shown as local dates.
   Challenge entirely; there is no partial-stay credit.
 - **Governance.** The vault owner whitelists staking pools, sets the oracle and
   updates config directly. No DAO, no timelock.
-- **Frontend polish.** Component styling is placeholder; event history,
-  per-tranche countdowns and a sponsor leaderboard are not built.
+- **Frontend extras.** Event history, a check_unlock keeper and a sponsor
+  leaderboard are not built.
 - **Transferable lock positions** (lock as NFT) and a public sell-schedule
   dashboard showing when locked supply can unlock.
 - **Sputnik DAO integration** so community treasuries can sponsor Challenges.
