@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { CONFIG } from "../config";
 import { countdown, datetimeToTs, decodeResult, fmtDate, fmtDur, fromUnits, localDatetimeValue, nowTs, pct, toUnits } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
@@ -27,6 +28,7 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
   const { meta, refresh, refreshUser, locks } = useProtocol();
   const { accountId, call, toast } = useWallet();
   const [busy, setBusy] = useState<string | null>(null);
+  const navigate = useNavigate();
   const tm = meta(c.token);
   const sm = meta(c.sponsor_token);
   const pool = BigInt(c.sponsor_total) + BigInt(c.penalty_total);
@@ -94,7 +96,7 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
 
       <div className="mt-auto flex flex-wrap gap-2 pt-1">
         {canJoin && (
-          <button className="btn btn-primary btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("ceaser:join", { detail: c.id }))}>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate(`/app/lock?challenge=${c.id}`)}>
             {myLocks ? `Lock more (${myLocks} in)` : "Join by locking"}
           </button>
         )}
@@ -203,7 +205,7 @@ export function ChallengesSection() {
   const sorted = [...challenges].sort((a, b) => (a.state === "active" ? 0 : 1) - (b.state === "active" ? 0 : 1) || b.id - a.id);
 
   return (
-    <section id="challenges" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-20 scroll-mt-20">
+    <section id="challenges" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
       <SectionHead
         n="02"
         title="Challenges"

@@ -1,31 +1,32 @@
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { WalletProvider } from "./lib/wallet";
 import { ProtocolProvider } from "./lib/protocol";
-import { Nav } from "./components/Nav";
-import { Hero } from "./components/Hero";
-import { Stats } from "./components/Stats";
-import { Intro } from "./components/Intro";
+import { Toasts } from "./components/Toasts";
+import { Landing } from "./pages/Landing";
+import { AppShell } from "./pages/app/AppShell";
+import { Overview } from "./pages/app/Overview";
 import { LockSection } from "./components/LockSection";
 import { ChallengesSection } from "./components/ChallengesSection";
 import { ClaimSection } from "./components/ClaimSection";
-import { Footer } from "./components/Footer";
-import { Toasts } from "./components/Toasts";
 
 export default function App() {
   return (
-    <WalletProvider>
-      <ProtocolProvider>
-        <Nav />
-        <main>
-          <Hero />
-          <Stats />
-          <Intro />
-          <LockSection />
-          <ChallengesSection />
-          <ClaimSection />
-        </main>
-        <Footer />
-        <Toasts />
-      </ProtocolProvider>
-    </WalletProvider>
+    <BrowserRouter>
+      <WalletProvider>
+        <ProtocolProvider>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/app" element={<AppShell />}>
+              <Route index element={<Overview />} />
+              <Route path="lock" element={<LockSection />} />
+              <Route path="challenges" element={<ChallengesSection />} />
+              <Route path="locks" element={<ClaimSection />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          <Toasts />
+        </ProtocolProvider>
+      </WalletProvider>
+    </BrowserRouter>
   );
 }

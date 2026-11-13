@@ -170,7 +170,7 @@ export function ClaimSection() {
   const done = locks.filter((l) => l.status !== "active");
 
   return (
-    <section id="claim" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-20 scroll-mt-20">
+    <section id="claim" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
       <SectionHead
         n="03"
         title="Your locks"

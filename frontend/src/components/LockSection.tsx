@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
 import { datetimeToTs, fromUnits, localDatetimeValue, mult, pct, toUnits } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
@@ -42,16 +43,14 @@ export function LockSection() {
     if (!pool && pools.length) setPool(pools[0]);
   }, [pools, pool]);
 
+  const [params] = useSearchParams();
   useEffect(() => {
-    const onJoin = (e: Event) => {
-      const id = (e as CustomEvent<number>).detail;
+    const id = params.get("challenge");
+    if (id) {
       setKind("collective_threshold");
-      setChallengeId(String(id));
-      document.getElementById("lock")?.scrollIntoView({ behavior: "smooth" });
-    };
-    window.addEventListener("ceaser:join", onJoin);
-    return () => window.removeEventListener("ceaser:join", onJoin);
-  }, []);
+      setChallengeId(id);
+    }
+  }, [params]);
 
   const active = challenges.filter((c) => c.state === "active" && c.token === token);
   const maxPenalty = config ? config.max_penalty_bps / 100 : 20;
@@ -114,7 +113,7 @@ export function LockSection() {
   const setRung = (i: number, k: keyof Rung, v: string) => setRungs((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
 
   return (
-    <section id="lock" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-16 scroll-mt-20">
+    <section id="lock" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
       <SectionHead n="01" title="Create a lock" sub="Commit tokens behind a strategy your future self can't override." />
       <div className="mt-8 grid lg:grid-cols-[1fr_380px] gap-6 items-start [&>*]:min-w-0">
         <div className="card p-6 sm:p-8">

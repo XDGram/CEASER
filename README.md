@@ -253,17 +253,17 @@ cd frontend && npm install && npm run dev
 `src/config.ts` points at the live deployment above. To use your own, copy the
 ids from `scripts/deployed.json` into it. `npm run build` writes `dist/`.
 
-The page has three sections that map one to one onto the spec:
+Two surfaces:
 
-- **01 Create a lock.** Strategy picker (time, ROI ladder, collective
-  threshold), max duration, penalty, penalty sink, Challenge and staking pool,
-  with a live preview of the exact `msg` sent in `ft_transfer_call` and your
-  NEAR boost tier.
-- **02 Challenges.** Every Challenge with progress toward its threshold, pool
-  size, deadline and state. Join by locking, sponsor a pool, create a new
-  Challenge, finalize after the deadline, refund a failed sponsorship.
-- **03 Your locks.** Per-tranche status, `check_unlock` on price tranches,
-  `claim` and `early_exit`.
+- **Landing page** (`/`): what CEASER is, a scroll-driven walkthrough of the
+  demo arc with the real testnet numbers, how it works, the three mechanics,
+  who it is for, the manipulation defenses, and the live Challenges read from
+  the vault.
+- **App** (`/app`, after connecting a wallet): **Overview** (balance, locked
+  total, NEAR boost tier, claimable locks, your Challenges), **Lock** (strategy
+  picker with a live preview of the exact `ft_transfer_call` msg),
+  **Challenges** (join, sponsor, create, finalize, refund) and **My locks**
+  (per-tranche status, `check_unlock`, `claim`, `early_exit`).
 
 ## Roadmap: not shipped
 

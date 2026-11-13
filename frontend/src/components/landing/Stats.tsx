@@ -1,9 +1,10 @@
 import { motion, useInView, useMotionValue, useSpring } from "framer-motion";
 import { useEffect, useRef } from "react";
-import { useProtocol } from "../lib/protocol";
-import { useWallet } from "../lib/wallet";
-import { CONFIG } from "../config";
-import { compact } from "../lib/near";
+import { useProtocol } from "../../lib/protocol";
+import { useWallet } from "../../lib/wallet";
+import { EnterButton } from "../Nav";
+import { CONFIG } from "../../config";
+import { compact } from "../../lib/near";
 
 function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -23,7 +24,7 @@ function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
 
 export function Stats() {
   const { challenges, lockCount, meta, reachable } = useProtocol();
-  const { connect, accountId } = useWallet();
+  const { accountId } = useWallet();
   const tokenMeta = meta(CONFIG.contracts.token);
   const sum = (k: "total_locked" | "penalty_total") => challenges.reduce((a, c) => a + BigInt(c[k]), 0n);
   const locked = compact(sum("total_locked"), tokenMeta.decimals);
@@ -58,11 +59,7 @@ export function Stats() {
               ? "The vault is not reachable right now. Reads will retry automatically."
               : "Every number on this page is read live from the vault on NEAR testnet. Connect a wallet to lock, join a Challenge or claim."}
           </p>
-          {!accountId && (
-            <button onClick={connect} className="btn btn-primary self-start">
-              <span className="pixel text-[11px]">C</span> Connect
-            </button>
-          )}
+          {!accountId && <EnterButton className="btn btn-primary self-start" />}
         </div>
       </div>
     </section>
