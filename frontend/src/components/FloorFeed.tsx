@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Select } from "./Select";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fmtDur, fromUnits, short, timeAgo } from "../lib/near";
@@ -219,14 +220,7 @@ export function Composer({ challengeId, challenges, onPosted, compact = false }:
               </button>
             ))}
             {challengeId === undefined && challenges && (
-              <select className="input !w-auto !py-1 !px-2.5 !text-[12px] !rounded-full" value={target} onChange={(e) => setTarget(e.target.value)}>
-                <option value="">No Challenge</option>
-                {challenges.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} · {c.title.slice(0, 32)}
-                  </option>
-                ))}
-              </select>
+              <Select compact value={target} onChange={setTarget} options={[{ value: "", label: "No Challenge" }, ...challenges.map((c) => ({ value: String(c.id), label: `#${c.id} · ${c.title}` }))]} />
             )}
           </div>
           <textarea

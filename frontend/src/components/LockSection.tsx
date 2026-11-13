@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { LockProgress, type LockStage } from "./LockProgress";
+import { Select } from "./Select";
 import { view } from "../lib/near";
 import { CONFIG } from "../config";
 import { datetimeToTs, fromUnits, localDatetimeValue, mult, pct, toUnits } from "../lib/near";
@@ -278,29 +279,15 @@ export function LockSection() {
             )}
 
             {kind === "collective_threshold" ? (
-              <label className="field sm:col-span-2">
+              <div className="field sm:col-span-2">
                 <span>Challenge</span>
-                <select className="input" value={challengeId} onChange={(e) => setChallengeId(e.target.value)}>
-                  <option value="">Pick an active Challenge</option>
-                  {active.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      #{c.id} · {c.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select value={challengeId} onChange={setChallengeId} placeholder="Pick an active Challenge" options={active.map((c) => ({ value: String(c.id), label: `#${c.id} · ${c.title}` }))} />
+              </div>
             ) : (
-              <label className="field sm:col-span-2">
+              <div className="field sm:col-span-2">
                 <span>Also join a Challenge (optional)</span>
-                <select className="input" value={challengeId} onChange={(e) => setChallengeId(e.target.value)}>
-                  <option value="">None</option>
-                  {active.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      #{c.id} · {c.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select value={challengeId} onChange={setChallengeId} options={[{ value: "", label: "None" }, ...active.map((c) => ({ value: String(c.id), label: `#${c.id} · ${c.title}` }))]} />
+              </div>
             )}
 
             <label className="field">
@@ -312,26 +299,23 @@ export function LockSection() {
               <input className="input" inputMode="decimal" value={penalty} onChange={(e) => setPenalty(e.target.value)} />
             </label>
 
-            <label className="field">
+            <div className="field">
               <span>Penalty sink</span>
-              <select className="input" value={sinkKind} onChange={(e) => setSinkKind(e.target.value as SinkKind)}>
-                <option value="default">Default · your Challenge, else treasury</option>
-                <option value="challenge">A Challenge pool</option>
-                <option value="account">An account</option>
-              </select>
-            </label>
+              <Select
+                value={sinkKind}
+                onChange={(v) => setSinkKind(v as SinkKind)}
+                options={[
+                  { value: "default", label: "Default", hint: "Your Challenge, else treasury" },
+                  { value: "challenge", label: "A Challenge pool", hint: "Penalty pays that Challenge's lockers" },
+                  { value: "account", label: "An account", hint: "Penalty goes to an address you name" },
+                ]}
+              />
+            </div>
             {sinkKind === "challenge" && (
-              <label className="field">
+              <div className="field">
                 <span>Sink Challenge</span>
-                <select className="input" value={sinkChallenge} onChange={(e) => setSinkChallenge(e.target.value)}>
-                  <option value="">Pick</option>
-                  {active.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      #{c.id} · {c.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select value={sinkChallenge} onChange={setSinkChallenge} placeholder="Pick a Challenge" options={active.map((c) => ({ value: String(c.id), label: `#${c.id} · ${c.title}` }))} />
+              </div>
             )}
             {sinkKind === "account" && (
               <label className="field">
@@ -340,17 +324,10 @@ export function LockSection() {
               </label>
             )}
             {sinkKind === "default" && (
-              <label className="field">
+              <div className="field">
                 <span>Staking pool (NEAR boost)</span>
-                <select className="input" value={pool} onChange={(e) => setPool(e.target.value)}>
-                  <option value="">None</option>
-                  {pools.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select value={pool} onChange={setPool} options={[{ value: "", label: "None", hint: "No boost" }, ...pools.map((p) => ({ value: p, label: p, hint: "Whitelisted staking pool" }))]} />
+              </div>
             )}
           </div>
 
