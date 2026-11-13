@@ -14,6 +14,10 @@ export const CONFIG = {
   ],
   walletUrl: "https://testnet.mynearwallet.com",
   explorerUrl: "https://testnet.nearblocks.io",
+  // The Floor (community feed) storage. The anon key is a public, publishable
+  // key, safe to ship in the client; RLS limits what it can do.
+  supabaseUrl: "https://ncbrsrklofofdqdftwjw.supabase.co",
+  supabaseAnonKey: "sb_publishable_O3ev7dyTwadU-uAlsB-2Mw_3Y6SFuV7",
   contracts: {
     vault: "ceaser-vault-756e8a.testnet",
     oracle: "ceaser-oracle-756e8a.testnet",

@@ -130,6 +130,14 @@ export function fmtDur(sec: number): string {
   return `${(sec / 86400).toFixed(sec % 86400 ? 1 : 0)}d`;
 }
 
+export function timeAgo(iso: string): string {
+  const d = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (d < 60) return "just now";
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+  return `${Math.floor(d / 86400)}d ago`;
+}
+
 export function countdown(ts: number): string {
   const d = ts - nowTs();
   if (d <= 0) return "ended";

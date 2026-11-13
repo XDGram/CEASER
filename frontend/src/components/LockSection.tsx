@@ -7,6 +7,7 @@ import { datetimeToTs, fromUnits, localDatetimeValue, mult, pct, toUnits } from 
 import type { Lock } from "../lib/types";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
+import { createPost } from "../lib/floor";
 import type { Strategy } from "../lib/types";
 import { Busy, Row, SectionHead } from "./SectionHead";
 
@@ -43,6 +44,7 @@ export function LockSection() {
   const [sinkChallenge, setSinkChallenge] = useState("");
   const [sinkAccount, setSinkAccount] = useState("");
   const [pool, setPool] = useState<string>(pools[0] ?? "");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -113,7 +115,7 @@ export function LockSection() {
     return null;
   };
 
-  const finish = async (sinceCount: number, hash: string | null | undefined, label: string) => {
+  const finish = async (sinceCount: number, hash: string | null | undefined, label: string, lockNote?: string) => {
     setStage({ kind: "confirming", hash });
     const lock = await awaitNewLock(sinceCount);
     await Promise.all([refresh(), refreshUser()]);
@@ -121,15 +123,26 @@ export function LockSection() {
       setStage({ kind: "failed", reason: "The vault did not accept this deposit, so the tokens were refunded to you. Check the strategy and the Challenge rules and try again.", hash });
       return;
     }
+    // Post the pledge to the Floor before navigating; the lock exists either
+    // way, so a failed post is dropped silently.
+    const text = (lockNote ?? "").trim().slice(0, 240);
+    if (text && accountId) {
+      try {
+        await createPost({ author: accountId, kind: "pledge", body: text, lock_id: lock.id, challenge_id: lock.challenge_id });
+      } catch {
+        /* best effort */
+      }
+    }
     setStage({ kind: "done", lockId: lock.id, hash });
     setAmount("");
+    setNote("");
     window.setTimeout(() => navigate(`/app/locks?new=${lock.id}`), 1400);
     void label;
   };
 
   // Resume after a MyNearWallet redirect.
   useEffect(() => {
-    let pending: { sinceCount: number; label: string } | null = null;
+    let pending: { sinceCount: number; label: string; note?: string } | null = null;
     try {
       const raw = sessionStorage.getItem("ceaser:pending-lock");
       pending = raw ? JSON.parse(raw) : null;
@@ -147,7 +160,7 @@ export function LockSection() {
       setStage({ kind: "failed", reason: returnedTx.error, hash: null });
       return;
     }
-    void finish(pending.sinceCount, returnedTx.hash, pending.label);
+    void finish(pending.sinceCount, returnedTx.hash, pending.label, pending.note);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returnedTx, accountId]);
 
@@ -163,7 +176,7 @@ export function LockSection() {
       setStageLabel(label);
       setStage({ kind: "signing" });
       try {
-        sessionStorage.setItem("ceaser:pending-lock", JSON.stringify({ sinceCount, label }));
+        sessionStorage.setItem("ceaser:pending-lock", JSON.stringify({ sinceCount, label, note }));
       } catch {
         /* ignore */
       }
@@ -175,7 +188,7 @@ export function LockSection() {
         /* ignore */
       }
       const hash = (outcome as { transaction?: { hash?: string } })?.transaction?.hash ?? null;
-      await finish(sinceCount, hash, label);
+      await finish(sinceCount, hash, label, note);
     } catch (e) {
       try {
         sessionStorage.removeItem("ceaser:pending-lock");
@@ -340,6 +353,11 @@ export function LockSection() {
               </label>
             )}
           </div>
+
+          <label className="field mt-5">
+            <span>Why are you locking? (optional, posts to the Floor)</span>
+            <textarea className="input min-h-[60px] text-[13px]" maxLength={240} placeholder="State the thesis. Your future self will read it." value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
 
           <div className="mt-7 flex flex-wrap items-center gap-4">
             <button className="btn btn-accent" disabled={busy || !msg.ok} onClick={submit}>

@@ -4,12 +4,14 @@ import { useWallet } from "../../lib/wallet";
 import { useProtocol } from "../../lib/protocol";
 import { short, mult } from "../../lib/near";
 import { Mark } from "../../components/Mark";
+import { Pfp } from "../../components/Pfp";
 
 const tabs = [
   ["Overview", "/app", true],
   ["Lock", "/app/lock", false],
   ["Challenges", "/app/challenges", false],
   ["My locks", "/app/locks", false],
+  ["Community", "/app/community", false],
 ] as const;
 
 export function AppShell() {
@@ -41,7 +43,8 @@ export function AppShell() {
           <div className="flex items-center gap-2 shrink-0">
             <span className="pill hidden md:inline-flex">boost {mult(boostBps)}</span>
             {accountId ? (
-              <button className="btn btn-outline btn-sm font-mono" onClick={disconnect} title="Disconnect">
+              <button className="btn btn-outline btn-sm font-mono !pl-1.5 flex items-center gap-2" onClick={disconnect} title="Disconnect">
+                <Pfp id={accountId} size={20} />
                 {short(accountId, 20)}
               </button>
             ) : (

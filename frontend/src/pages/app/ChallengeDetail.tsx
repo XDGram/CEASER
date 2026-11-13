@@ -7,6 +7,9 @@ import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import type { Challenge, Lock } from "../../lib/types";
 import { Row } from "../../components/SectionHead";
+import { Pfp } from "../../components/Pfp";
+import { Composer, PostCard, useAutoRefresh } from "../../components/FloorFeed";
+import { convictionByOwner, loadFeed, type FeedData } from "../../lib/floor";
 import { RewardEstimate } from "../../components/RewardEstimate";
 
 function Progress({ value, max }: { value: bigint; max: bigint }) {
@@ -163,6 +166,7 @@ export function ChallengeDetail() {
       </div>
 
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+        <div className="flex flex-col gap-5 min-w-0">
         <div className="card p-6">
           <h2 className="text-[17px] tracking-tight">Lockers</h2>
           <p className="mt-0.5 text-[12px] text-ink-2">Every active lock in this Challenge, by conviction (amount × time to deadline).</p>
@@ -176,8 +180,9 @@ export function ChallengeDetail() {
                 {lockers.map((l, i) => {
                   const tier = stakes[l.id] !== undefined ? boostLabel(stakes[l.id], tiers) : null;
                   return (
-                    <div key={l.id} className="py-3 grid grid-cols-[24px_minmax(0,1fr)_auto] items-baseline gap-3 text-[13px]">
+                    <div key={l.id} className="py-3 grid grid-cols-[18px_30px_minmax(0,1fr)_auto] items-center gap-3 text-[13px]">
                       <span className="pixel text-[12px] text-ink-3">{i + 1}</span>
+                      <Pfp id={l.owner} size={30} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-[12px] text-ink truncate max-w-full">{short(l.owner, 30)}</span>
@@ -203,8 +208,8 @@ export function ChallengeDetail() {
               <div className="text-[11px] uppercase tracking-[0.12em] text-ink-3 font-mono">Paper hands</div>
               <div className="mt-2 divide-y divide-line">
                 {exited.map((l) => (
-                  <div key={l.id} className="py-2 flex items-baseline justify-between gap-3 text-[12.5px]">
-                    <span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0 max-w-full">{short(l.owner, 30)}</span>
+                  <div key={l.id} className="py-2 flex items-center justify-between gap-3 text-[12.5px]">
+                    <span className="flex items-center gap-2 min-w-0"><Pfp id={l.owner} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0 max-w-full">{short(l.owner, 30)}</span></span>
                     <span className="text-bad whitespace-nowrap">
                       paid {fromUnits(BigInt(l.amount) - BigInt(l.claimed_amount), tm.decimals, 0)} {tm.symbol}
                     </span>
@@ -213,6 +218,9 @@ export function ChallengeDetail() {
               </div>
             </div>
           )}
+        </div>
+
+        <ChallengeFloor cid={c.id} />
         </div>
 
         <div className="flex flex-col gap-5">
@@ -228,8 +236,8 @@ export function ChallengeDetail() {
               ) : (
                 <div className="divide-y divide-line">
                   {sponsors.map((s) => (
-                    <div key={s.account} className="py-2 flex items-baseline justify-between gap-3 text-[12.5px]">
-                      <span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0">{short(s.account, 28)}</span>
+                    <div key={s.account} className="py-2 flex items-center justify-between gap-3 text-[12.5px]">
+                      <span className="flex items-center gap-2 min-w-0"><Pfp id={s.account} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0">{short(s.account, 28)}</span></span>
                       <span className="text-ink whitespace-nowrap">
                         {fromUnits(s.amount, sm.decimals, 0)} {sm.symbol}
                       </span>
@@ -263,6 +271,37 @@ export function ChallengeDetail() {
         </div>
       </div>
     </section>
+  );
+}
+
+/** The Floor, filtered to one Challenge: composer plus feed. */
+function ChallengeFloor({ cid }: { cid: number }) {
+  const { challenges } = useProtocol();
+  const { accountId } = useWallet();
+  const [data, setData] = useState<FeedData | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setData(await loadFeed({ challengeId: cid }, accountId, challenges, 30));
+    } catch {
+      /* keep the last good feed; the next tick retries */
+    }
+  }, [cid, accountId, challenges]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
+  useAutoRefresh(reload);
+  const conviction = useMemo(() => convictionByOwner(data?.locks ?? []), [data]);
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-baseline justify-between gap-3 border-b border-line pb-2">
+        <h2 className="text-[17px] tracking-tight">Floor talk</h2>
+        <span className="text-[11.5px] text-ink-2">what the lockers are saying</span>
+      </div>
+      <Composer challengeId={cid} onPosted={reload} compact />
+      {data === null && <div className="card p-5 text-[13px] text-ink-2">Reading the floor…</div>}
+      {data && data.posts.length === 0 && <div className="card p-5 text-[13px] text-ink-2">Quiet so far. First thesis takes the floor.</div>}
+      {data && data.posts.map((p) => <PostCard key={p.id} post={p} names={data.names} conviction={conviction.get(p.author)} onChanged={reload} showChallengeLink={false} />)}
+    </div>
   );
 }
 

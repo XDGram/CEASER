@@ -5,6 +5,11 @@ import { countdown, fromUnits, mult, nowTs } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import { RewardEstimate } from "../../components/RewardEstimate";
+import { useCallback, useEffect, useState } from "react";
+import { loadFeed, type FeedData } from "../../lib/floor";
+import { Pfp } from "../../components/Pfp";
+import { KindTag } from "../../components/FloorFeed";
+import { short, timeAgo } from "../../lib/near";
 
 export function Overview() {
   const { accountId } = useWallet();
@@ -20,6 +25,24 @@ export function Overview() {
     return tail || l.tranches.some((t) => !t.claimed && (t.ripe || t.conditions.some((c) => "time_after" in c && nowTs() >= c.time_after.ts))) || (ch && !l.reward_claimed);
   });
   const nextTier = tiers.find(([, b]) => b > boostBps);
+
+  // The three latest Floor posts from Challenges the user is in, or the three
+  // latest overall when they are in none (or theirs are quiet).
+  const [floor, setFloor] = useState<FeedData | null>(null);
+  const myChallengeIds = mine.map((c) => c.id).join(",");
+  const loadFloor = useCallback(async () => {
+    try {
+      setFloor(await loadFeed({}, accountId, challenges, 30));
+    } catch {
+      /* the card simply stays empty */
+    }
+  }, [accountId, challenges]);
+  useEffect(() => {
+    loadFloor();
+  }, [loadFloor]);
+  const mineIds = new Set(myChallengeIds ? myChallengeIds.split(",").map(Number) : []);
+  const fromMine = (floor?.posts ?? []).filter((p) => p.challenge_id !== null && mineIds.has(p.challenge_id));
+  const floorPosts = (fromMine.length ? fromMine : (floor?.posts ?? [])).slice(0, 3);
 
   const tiles = [
     { k: `${tm.symbol} balance`, v: balance === null ? "…" : fromUnits(balance, tm.decimals, 0), s: "in your wallet" },
@@ -114,6 +137,31 @@ export function Overview() {
             })}
             {!active.length && <p className="py-3 text-[13px] text-ink-2">No active locks. Create one to start.</p>}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-5 card p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[17px] tracking-tight">From the floor</h2>
+          <Link to="/app/community" className="text-[12px] text-ink-2 hover:text-ink">
+            The Floor →
+          </Link>
+        </div>
+        <div className="mt-4 grid sm:grid-cols-3 gap-4">
+          {floorPosts.map((p) => (
+            <Link key={p.id} to="/app/community" className="rounded-lg bg-paper px-4 py-3 hover:bg-paper-2 transition min-w-0">
+              <div className="flex items-center gap-2">
+                <Pfp id={p.author} size={22} />
+                <span className="text-[12px] font-medium text-ink truncate">{floor?.names[p.author] ?? short(p.author, 18)}</span>
+                <span className="ml-auto shrink-0">
+                  <KindTag kind={p.kind} />
+                </span>
+              </div>
+              <p className="mt-2 text-[12.5px] text-ink-2 leading-snug line-clamp-3 break-words">{p.body}</p>
+              <div className="mt-1.5 text-[10.5px] text-ink-3">{timeAgo(p.created_at)}</div>
+            </Link>
+          ))}
+          {!floorPosts.length && <p className="text-[13px] text-ink-2 sm:col-span-3">Nothing on the floor yet.</p>}
         </div>
       </div>
     </section>
