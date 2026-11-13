@@ -1,0 +1,270 @@
+# CEASER
+
+> Memecoin dumps pay the diamond hands. Diamond hands who back NEAR get paid more.
+
+A NEAR testnet protocol where memecoin holders lock tokens behind time, price
+or community conditions. Leaving a lock early costs a penalty, and that penalty
+flows to the lockers who stayed. Lockers who also stake NEAR earn a multiplier
+on their Challenge reward.
+
+Built for a NEAR hackathon. Testnet only. **The price oracle is a mock.**
+
+## Demo
+
+```bash
+./demo.sh
+```
+
+`demo.sh` builds every contract, deploys the vault, the test token, the mock
+oracle and the mock staking pool to testnet, then plays the full arc and asserts
+each step from view calls and emitted events:
+
+1. User A locks 100k CSTEST with an ROI ladder 50/25/25 at +50% / +100% / +200%,
+   penalty 20% into Challenge C1.
+2. User B locks 50k CSTEST into Challenge C1. B has 500 NEAR staked in the mock
+   pool, so B's boost is 1.25x.
+3. User A calls `early_exit`. A 20k CSTEST penalty appears in C1's `penalty_total`.
+4. The mock oracle price advances, C1's deadline passes, `finalize(C1)` returns
+   `succeeded`.
+5. User B calls `claim` and receives principal plus the boosted reward.
+
+**Pending:** `demo.sh` and `scripts/deployed.json` are not in the tree yet.
+The testnet account ids and the demo transcript will be added here once
+`demo.sh` has run and written `scripts/deployed.json`:
+
+| Contract | Testnet account |
+|---|---|
+| Vault | _pending_ |
+| Test token (CSTEST, 18 decimals) | _pending_ |
+| Mock oracle | _pending_ |
+| Mock staking pool | _pending_ |
+
+Until then, the sandbox integration tests below exercise the same flows locally.
+
+## What CEASER is
+
+Memecoin communities bleed out when holders dump on each other. CEASER turns
+holding into a game with real stakes on both sides:
+
+- A **Lock** is a personal commitment of a NEP-141 token. It unlocks in
+  tranches, each gated by a condition: a date, a price target relative to the
+  price at lock time, or the outcome of a community Challenge. Every tranche
+  also unlocks at `start + max_duration_sec` no matter what, so principal is
+  never trapped.
+- A **Challenge** is a community goal: lock at least `threshold_amount` of a
+  token before `deadline_ts`. Sponsors fund a reward pool. If the goal is met,
+  the pool pays the lockers in proportion to their conviction. If not, sponsors
+  get their deposits back. Locker principal is never confiscated either way.
+- **Leaving early** costs `penalty_bps` of the unclaimed principal, and that
+  penalty is routed to a Challenge pool. Dumpers pay diamond hands.
+- **NEAR boost:** lockers with NEAR staked in a whitelisted staking pool get a
+  multiplier on their Challenge reward, paid from a reserve each Challenge sets
+  aside.
+
+The full method list and every JSON shape live in [INTERFACE.md](INTERFACE.md).
+That file is the contract between the pieces below and is the source of truth
+if this README and the code ever disagree.
+
+## The three core mechanics
+
+### 1. Tranche locks with a two-read price commit
+
+A lock's strategy compiles into tranches at creation:
+
+| Strategy | Tranches | Unlock condition |
+|---|---|---|
+| `time` | one, 100% | `time_after` a timestamp |
+| `roi_ladder` | one per rung, fractions sum to 100% | oracle TWAP ≥ reference price × multiplier |
+| `collective_threshold` | one, 100% | the named Challenge is finalized |
+| `any` | OR of the above, at most one ladder | any inner condition |
+
+`reference_price` is the oracle TWAP read once when the lock is created and
+never changes. Price tranches cannot be claimed on a single read. `check_unlock`
+is a two-step commit: the first read **arms** the tranche if the TWAP is above
+target and liquidity is above the floor; a second read at least `cooldown_sec`
+later **ripens** it if the condition still holds, or disarms it if not. Spikes
+inside one TWAP window do not unlock anything.
+
+### 2. Challenges: lock together, win together
+
+`create_challenge` opens a goal on a token with a threshold, a deadline, a
+minimum lock duration, a sponsor token and a boost reserve share. Anyone can
+sponsor by sending the sponsor token to the vault with a `{"sponsor": …}` msg.
+A lock joins by naming the Challenge at creation.
+
+After the deadline anyone calls `finalize`. The Challenge becomes `succeeded`
+if `total_locked ≥ threshold_amount`, otherwise `failed`. `claim` finalizes
+lazily if nobody has yet.
+
+Each participating lock's share of the pool is its **conviction** weight,
+`amount × (deadline − start)`: bigger and earlier locks earn more.
+
+### 3. The bridge: penalties fund the pool
+
+`early_exit` pays out every tranche that is already claimable in full, charges
+`penalty_bps` on the rest, sends the penalty to the lock's `penalty_sink`, and
+returns the remainder. The default sink is the lock's own Challenge, so a dump
+by one participant directly raises the payout for everyone who stays.
+
+## Design rules worth knowing
+
+These come straight from INTERFACE.md and are enforced by the vault:
+
+- **Penalties always pay the lockers who stayed, even when the Challenge
+  fails.** At finalize, `distributable = penalty_total + sponsor_total` on
+  success and `distributable = penalty_total` on failure. Sponsor deposits are
+  the only thing refunded on failure.
+- **Boosts are paid from a per-Challenge reserve.** `boost_reserve_bps` of the
+  distributable amount is set aside. Base rewards are split pro rata from the
+  rest and always sum to at most `base_pool`. A locker's boost extra is
+  `base_reward × (boost_bps − 10000) / 10000`, capped by what is left in the
+  reserve, first come first served. Boosts can never dilute other lockers.
+- **Joining a Challenge commits the lock until it is finalized.** A
+  participating lock cannot `claim` principal while its Challenge is `active`,
+  whatever its own strategy says. `early_exit` is always available, at the
+  penalty.
+- **Principal is never confiscated.** Every tranche unlocks at
+  `start + max_duration_sec` regardless of price or Challenge outcome.
+- **Invalid lock parameters refund the deposit.** A bad strategy, a
+  non-whitelisted staking pool or a failed oracle read at creation returns the
+  full `ft_transfer_call` amount via the standard NEP-141 refund.
+
+Boost tiers, read from the lock's staking pool via `get_account_staked_balance`:
+
+| Staked NEAR | Multiplier |
+|---|---|
+| < 10 | 1.00x |
+| ≥ 10 | 1.10x |
+| ≥ 100 | 1.25x |
+| ≥ 1,000 | 1.50x |
+| ≥ 10,000 | 2.00x |
+
+## Architecture
+
+```
+contracts/
+  vault/              VaultCore: locks, tranches, Challenges, rewards, penalties
+  test-token/         NEP-141 + NEP-145 + NEP-148 token (CSTEST) with a public mint faucet
+  mock-oracle/        MockOracle: owner-set prices, real time-weighted TWAP, liquidity floor
+  mock-staking-pool/  owner-set get_account_staked_balance, mirrors the core staking pool
+integration-tests/    near-workspaces sandbox tests (integration-tests/tests/flows.rs)
+frontend/             one-page app: index.html + config.js, no build step
+scripts/              testnet deploy and demo (deployed.json written by demo.sh)
+INTERFACE.md          the binding spec for every method and JSON shape
+build.sh              builds every contract and copies wasm to res/
+```
+
+How the pieces talk:
+
+```
+ user ──ft_transfer_call(msg)──▶ test-token ──ft_on_transfer──▶ vault
+                                                                 │
+   check_unlock / claim at lock creation ── twap, liquidity ──▶ mock-oracle
+   claim (reward) ────────────── get_account_staked_balance ──▶ mock-staking-pool
+   claim / early_exit / refund ── ft_transfer ───────────────▶ test-token ──▶ user
+```
+
+All deposits enter through `ft_transfer_call` on the token with a JSON `msg`
+of `{"lock": …}` or `{"sponsor": …}`. The vault never holds NEAR for users.
+If a payout transfer fails, the amount is recorded and can be pulled with
+`withdraw_owed`.
+
+**The oracle is a mock.** `MockOracle` keeps up to 64 owner-set observations
+per token and computes a genuine piecewise-constant TWAP over the requested
+window, so the two-read commit behaves realistically. Prices are whatever the
+owner sets. A `RefTwapOracle` stub in `contracts/mock-oracle/src/ref_twap_oracle.rs`
+documents how a production read from a Ref Finance pool would look; its body
+is unimplemented and it is not deployed. Do not use this protocol with real
+value until a real oracle replaces the mock.
+
+## Running the tests
+
+Requirements: Rust stable with the `wasm32-unknown-unknown` target, `cargo-near`
+0.23, and `near` (near-cli-rs) for the testnet scripts.
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install cargo-near near-cli-rs
+```
+
+Build every contract, then run the sandbox suite:
+
+```bash
+./build.sh
+```
+
+```bash
+cargo test -p integration-tests
+```
+
+`build.sh` writes `res/ceaser_vault.wasm`, `res/test_token.wasm`,
+`res/mock_oracle.wasm` and `res/mock_staking_pool.wasm`. The tests deploy those
+to a local near-workspaces sandbox (downloaded on first run) and cover seven
+flows:
+
+| Test | What it proves |
+|---|---|
+| `roi_ladder_partial_claims` | rungs ripen and pay one at a time as the TWAP crosses each multiplier |
+| `two_read_commit_blocks_price_spikes` | a spike that reverts before the cooldown is disarmed, not paid |
+| `collective_threshold_success_pays_pro_rata` | a met threshold pays the sponsor pool by conviction |
+| `collective_threshold_failure_keeps_principal_safe` | a missed threshold refunds sponsors and returns every locker's principal |
+| `early_exit_penalty_funds_the_challenge_pool` | the exit penalty lands in `penalty_total` of the sink Challenge |
+| `participant_exit_leaves_the_challenge` | an exited lock stops counting toward the threshold, and its penalty still pays the remaining locker even though the Challenge then fails |
+| `near_staking_boost_multiplies_reward` | staked NEAR raises the reward by the tier multiplier, out of the reserve |
+
+Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracle`.
+
+## Running the frontend
+
+`frontend/index.html` is a single page with no build step. It loads near-api-js
+and NEAR Wallet Selector (MyNearWallet, Meteor) from CDNs and talks to testnet
+directly.
+
+1. Put the deployed account ids in `frontend/config.js`. They mirror
+   `scripts/deployed.json` once `demo.sh` has run. Until then the page shows a
+   "vault not reachable" notice and still lets you build and preview lock
+   messages.
+2. Serve the folder over HTTP (wallet redirects need a real origin):
+
+```bash
+cd frontend && python3 -m http.server 8080
+```
+
+3. Open http://localhost:8080 and connect a testnet wallet.
+
+The page has three sections that map one to one onto the spec:
+
+- **01 Create a lock.** Strategy picker (time, ROI ladder, collective
+  threshold), max duration, penalty, penalty sink, Challenge and staking pool.
+  Shows the exact `msg` JSON before sending `ft_transfer_call`.
+- **02 Challenges.** Every Challenge with progress toward its threshold, pool
+  size, deadline and state. Join by locking, sponsor a pool, create a new
+  Challenge, finalize after the deadline, refund a failed sponsorship.
+- **03 Claim.** Your locks with per-tranche status, `check_unlock` on price
+  tranches, `claim`, `early_exit`, and a NEAR boost badge computed from the
+  staking pool and `get_boost_tiers`.
+
+Amounts are converted with each token's `ft_metadata` decimals. Timestamps are
+shown as local dates.
+
+## Roadmap: not shipped
+
+- **Real oracle.** `RefTwapOracle` is a documented stub. A production deploy
+  needs a Ref Finance (or other DEX) TWAP read with on-chain liquidity checks.
+- **demo.sh and testnet ids.** The scripted testnet run and `scripts/deployed.json`
+  are pending; the sandbox tests cover the same arc today.
+- **Keeper for `check_unlock`.** Someone has to call it twice per price tranche.
+  A small bot or a cron-triggered caller is the obvious next step.
+- **Multi-token Challenges.** A Challenge is tied to one lock token and one
+  sponsor token.
+- **Reward claims for exited locks.** Exiting removes the lock from its
+  Challenge entirely; there is no partial-stay credit.
+- **Governance.** The vault owner whitelists staking pools, sets the oracle and
+  updates config directly. No DAO, no timelock.
+- **Frontend polish.** Component styling is placeholder; event history,
+  per-tranche countdowns and a sponsor leaderboard are not built.
+- **Audit.** None. Testnet only.
+
+## License
+
+[MIT](LICENSE).
