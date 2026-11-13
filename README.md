@@ -18,12 +18,12 @@ Built for a NEAR hackathon. Testnet only. **The price oracle is a mock.**
 ```
 
 `demo.sh` plays the full arc on NEAR testnet and asserts every step from view
-calls and emitted events (62 assertions, about 5 minutes). It uses the live
+calls and emitted events (49 assertions, about 5 minutes). It uses the live
 deployment below when the deployer keys are in the local keychain. From a fresh
 clone it has no such keys, so it first builds every contract and deploys its own
-fresh set with `scripts/deploy.sh` (about 2 more minutes), then runs the same arc.
-It checks its prerequisites up front and prints an install command for anything
-missing.
+fresh set with `scripts/deploy.sh` (about 2 more minutes, with its own checks),
+then runs the same arc. It checks its prerequisites up front and prints an
+install command for anything missing.
 
 1. User A locks 100k CSTEST with an ROI ladder 50/25/25 at +50% / +100% / +200%,
    penalty 20% into Challenge C1.
@@ -51,6 +51,12 @@ Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json))
 | Test token (CSTEST, 18 decimals) | `ceaser-token-756e8a.testnet` |
 | Mock oracle | `ceaser-oracle-756e8a.testnet` |
 | Mock staking pool | `ceaser-pool-756e8a.testnet` |
+| Treasury (vault owner) | `ceaser-treasury-756e8a.testnet` |
+
+The vault owner is a separate treasury account, not the vault itself. It
+whitelists staking pools, sets the oracle and updates config, and it receives
+the penalty of any lock whose sink is not a Challenge. `scripts/deploy.sh`
+creates one for every fresh deployment.
 
 The live vault runs with a 60 second TWAP window and a 30 second cooldown so the
 demo finishes in minutes. The contract defaults are 30 minutes and 10 minutes.
@@ -161,9 +167,9 @@ contracts/
   test-token/         NEP-141 + NEP-145 + NEP-148 token (CSTEST) with a public mint faucet
   mock-oracle/        MockOracle: owner-set prices, real time-weighted TWAP, liquidity floor
   mock-staking-pool/  owner-set get_account_staked_balance, mirrors the core staking pool
-integration-tests/    near-workspaces sandbox tests (integration-tests/tests/flows.rs)
-frontend/             Vite + React app (src/config.ts holds the contract ids)
-scripts/              testnet deploy script, shared helpers, deployed.json (live account ids)
+integration-tests/    near-workspaces sandbox tests (tests/flows.rs, tests/hardening.rs)
+frontend/             Vite + React app: landing page and the app (src/config.ts holds the contract ids)
+scripts/              deploy, seed and helper scripts, deployed.json (live account ids)
 demo.sh               the scripted testnet demo arc
 INTERFACE.md          the binding spec for every method and JSON shape
 build.sh              builds every contract and copies wasm to res/
@@ -214,8 +220,9 @@ cargo test -p integration-tests
 
 `build.sh` writes `res/ceaser_vault.wasm`, `res/test_token.wasm`,
 `res/mock_oracle.wasm` and `res/mock_staking_pool.wasm`. The tests deploy those
-to a local near-workspaces sandbox (downloaded on first run) and cover seven
-core flows:
+to a local near-workspaces sandbox (downloaded on first run). There are 18
+integration tests in two files. `integration-tests/tests/flows.rs` covers the
+seven core flows:
 
 | Test | What it proves |
 |---|---|
@@ -227,11 +234,12 @@ core flows:
 | `participant_exit_leaves_the_challenge` | an exited lock stops counting toward the threshold, and its penalty still pays the remaining locker even though the Challenge then fails |
 | `near_staking_boost_multiplies_reward` | staked NEAR raises the reward by the tier multiplier, out of the reserve |
 
-A second suite, `integration-tests/tests/hardening.rs`, adds 11 adversarial
-tests written during an independent audit pass: double claims and exits, the
-`any` strategy, the max-duration tail guard, oracle outages, failed payouts and
-their recovery, exits around the deadline, and a four-party check that rewards
-never exceed the pool. Both suites run with the command above (18 tests).
+The second file, `integration-tests/tests/hardening.rs`, holds 11 adversarial
+tests that came out of an independent audit pass over the vault: double claims
+and exits, the `any` strategy, the max-duration tail guard, oracle outages,
+failed payouts and their recovery, exits around the deadline, owner handover,
+and a four-party check that rewards never exceed the pool. Both files run with
+the command above.
 
 Known limits from that audit, accepted for the testnet MVP: creating a
 Challenge needs no storage deposit, so the vault account pays for storage;
@@ -240,7 +248,7 @@ before claiming; rounding dust and unused boost reserve stay in the vault.
 
 Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracle`.
 
-## Running the frontend
+## Frontend
 
 `frontend/` is a Vite + React + TypeScript app styled with Tailwind, using
 near-api-js and NEAR Wallet Selector (MyNearWallet, Meteor) on testnet. The
@@ -250,20 +258,47 @@ hosted version is at https://ceaser-nine.vercel.app.
 cd frontend && npm install && npm run dev
 ```
 
-`src/config.ts` points at the live deployment above. To use your own, copy the
-ids from `scripts/deployed.json` into it. `npm run build` writes `dist/`.
+`frontend/src/config.ts` points at the live deployment above. To use your own,
+copy the ids from `scripts/deployed.json` into it. `npm run build` writes
+`frontend/dist/`.
 
-Two surfaces:
+**Landing page** (`/`): what CEASER is, a scroll-driven walkthrough of the demo
+arc with the real testnet numbers, the three mechanics, who it is for, the
+manipulation defenses, and the live Challenges read from the vault.
 
-- **Landing page** (`/`): what CEASER is, a scroll-driven walkthrough of the
-  demo arc with the real testnet numbers, how it works, the three mechanics,
-  who it is for, the manipulation defenses, and the live Challenges read from
-  the vault.
-- **App** (`/app`, after connecting a wallet): **Overview** (balance, locked
-  total, NEAR boost tier, claimable locks, your Challenges), **Lock** (strategy
-  picker with a live preview of the exact `ft_transfer_call` msg),
-  **Challenges** (join, sponsor, create, finalize, refund) and **My locks**
-  (per-tranche status, `check_unlock`, `claim`, `early_exit`).
+**App** (`/app`, after connecting a wallet):
+
+- **Overview**: CSTEST balance, locked total, NEAR boost tier, claimable locks
+  and your Challenges.
+- **Lock**: strategy picker (time, ROI ladder, collective threshold) with a live
+  preview of the exact `ft_transfer_call` msg. Submitting runs an animated lock
+  flow (waiting for the wallet, confirming on NEAR, locked) and then jumps to
+  the new lock in My locks. An optional pledge note is posted to the Floor
+  alongside the lock.
+- **Challenges**: join, sponsor, create, finalize and refund. Each Challenge
+  has a detail page with a lockers leaderboard ordered by conviction, the
+  paper hands who exited, the sponsors, and an estimated reward for your lock.
+- **My locks**: per-tranche status, `check_unlock`, `claim` and `early_exit`.
+  Exiting opens a dialog with the breakdown (what is paid out, the penalty,
+  where it goes) and a hold-to-confirm button.
+- **The Floor** (`/app/community`): a community feed of theses, confessions,
+  pledges and exit receipts, with deterministic pixel avatars and a conviction
+  badge per account (amount locked now and longest hold). Posts are stored in Supabase through its public anon key
+  and are not wallet-signed yet. Receipts (pledges for active locks, paper-hands
+  receipts for exited locks) are derived from vault state on every load, not
+  stored.
+
+## Scripts
+
+Every script reads the shared helpers in `scripts/lib.sh` and talks to testnet
+through near-cli-rs and JSON-RPC.
+
+| Script | What it does |
+|---|---|
+| `scripts/deploy.sh` | builds, creates faucet-funded accounts (vault, oracle, token, staking pool, treasury), deploys and initializes the four contracts with the short demo config, wires them up and writes `scripts/deployed.json` |
+| `demo.sh` | the five-step demo arc above, with assertions; deploys first if the keys for `scripts/deployed.json` are missing |
+| `scripts/seed.sh` | seeds the deployment with live Challenges, sponsors, lockers and a few early exits so the app shows real data; needs no deployer keys |
+| `scripts/seed-floor.mjs` | seeds the Floor with community posts, replies and reactions from the seeded locker accounts (`node scripts/seed-floor.mjs`) |
 
 ## Roadmap: not shipped
 
@@ -279,8 +314,16 @@ Two surfaces:
   Challenge entirely; there is no partial-stay credit.
 - **Governance.** The vault owner whitelists staking pools, sets the oracle and
   updates config directly. No DAO, no timelock.
-- **Frontend extras.** Event history, a check_unlock keeper and a sponsor
-  leaderboard are not built.
+- **Wallet-signed Floor posts.** Posts are written with the public Supabase
+  key and carry no signature. The next step is a NEP-413 signed message per
+  post, verified by row-level security.
+- **Stored receipts poller.** Exit receipts are derived from vault state on
+  each load and carry no timestamp. A poller that watches `early_exit` events
+  and stores receipts with their block time is the fix.
+- **A vault view to enumerate sponsors.** The vault exposes
+  `get_sponsor_contribution(challenge_id, account_id)` but no list, so the
+  detail page can only show sponsors it already knows about.
+- **Event history in the app.** The app reads state, not the event log.
 - **Transferable lock positions** (lock as NFT) and a public sell-schedule
   dashboard showing when locked supply can unlock.
 - **Sputnik DAO integration** so community treasuries can sponsor Challenges.

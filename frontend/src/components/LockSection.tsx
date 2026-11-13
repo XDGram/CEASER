@@ -258,11 +258,12 @@ export function LockSection() {
                   {rungs.map((r, i) => (
                     <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
                       <div className="relative">
-                        <input className="input pr-8" inputMode="decimal" value={r.fraction} onChange={(e) => setRung(i, "fraction", e.target.value)} />
+                        {/* `.input` is unlayered CSS, so plain padding utilities lose to its px-3.5; the `!` variant wins. */}
+                        <input className="input pr-8!" inputMode="decimal" value={r.fraction} onChange={(e) => setRung(i, "fraction", e.target.value)} />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-3">%</span>
                       </div>
                       <div className="relative">
-                        <input className="input pl-7 pr-8" inputMode="decimal" value={r.gain} onChange={(e) => setRung(i, "gain", e.target.value)} />
+                        <input className="input pl-8! pr-8!" inputMode="decimal" value={r.gain} onChange={(e) => setRung(i, "gain", e.target.value)} />
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-3">+</span>
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-3">%</span>
                       </div>
