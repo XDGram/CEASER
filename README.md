@@ -9,6 +9,8 @@ on their Challenge reward.
 
 Built for a NEAR hackathon. Testnet only. **The price oracle is a mock.**
 
+**Live app:** https://ceaser-nine.vercel.app (connect a NEAR testnet wallet)
+
 ## Demo
 
 ```bash
@@ -232,6 +234,8 @@ Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracl
 `frontend/index.html` is a single page with no build step. It loads near-api-js
 and NEAR Wallet Selector (MyNearWallet, Meteor) from CDNs and talks to testnet
 directly.
+
+The hosted version is at https://ceaser-nine.vercel.app. To run it locally:
 
 1. `frontend/config.js` already points at the live testnet deployment above. To
    use your own deployment, copy the ids from `scripts/deployed.json` into it.
