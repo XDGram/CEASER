@@ -296,6 +296,10 @@ impl Vault {
         if tranche.ripe {
             return TrancheStatus::Ripe;
         }
+        if twap.is_err() || liquidity.is_err() {
+            // A failed oracle read says nothing about the price: leave the tranche as it is.
+            return if tranche.armed_at_ts.is_some() { TrancheStatus::CoolingDown } else { TrancheStatus::NotMet };
+        }
         let multiplier = tranche.price_multiplier().unwrap_or(u32::MAX) as u128;
         let price = self.valid_price(twap, liquidity);
         let met = price.is_some_and(|p| {
@@ -409,6 +413,11 @@ impl Vault {
                 lock.conviction = U128(0);
                 lock.challenge_id = None;
                 self.challenges.insert(cid, ch);
+            } else if !lock.reward_claimed && lock.conviction.0 > 0 {
+                // The lock stayed through a finalized challenge: its reward is earned.
+                // Paid here without the boost so it is not stranded in the vault.
+                lock.reward_claimed = true;
+                self.pay_reward(&lock, 0, 0);
             }
         }
 
