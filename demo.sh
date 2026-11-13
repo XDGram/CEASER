@@ -22,13 +22,14 @@ head1 "Checking prerequisites"
 check_prereqs
 
 # A usable deployment needs scripts/deployed.json, a local key for each of its
-# accounts (demo.sh signs as the oracle, pool, token and vault) and the
-# accounts to exist on testnet. Anything else means: deploy afresh.
+# accounts (demo.sh signs as the oracle, pool, token and the treasury, which
+# owns the vault) and the accounts to exist on testnet. Anything else means:
+# deploy afresh.
 needs_deploy=""
 if [ ! -f scripts/deployed.json ]; then
   needs_deploy="scripts/deployed.json is missing"
 else
-  for role in vault oracle token staking_pool; do
+  for role in vault oracle token staking_pool treasury; do
     acct=$(jq -r ".$role // empty" scripts/deployed.json 2>/dev/null || true)
     if [ -z "$acct" ]; then needs_deploy="scripts/deployed.json has no \"$role\" entry"; break; fi
     if ! have_key "$acct"; then needs_deploy="no key for the $role account $acct in $CREDENTIALS_DIR"; break; fi
@@ -48,6 +49,7 @@ VAULT=$(jq -r .vault scripts/deployed.json)
 ORACLE=$(jq -r .oracle scripts/deployed.json)
 TOKEN=$(jq -r .token scripts/deployed.json)
 POOL=$(jq -r .staking_pool scripts/deployed.json)
+TREASURY=$(jq -r .treasury scripts/deployed.json)
 DEADLINE_SEC="${DEADLINE_SEC:-150}"
 
 A_AMOUNT=$(tok 100000)   # 100k CSTEST
@@ -72,6 +74,7 @@ say "  vault        $VAULT"
 say "  oracle       $ORACLE"
 say "  token        $TOKEN"
 say "  staking pool $POOL"
+say "  treasury     $TREASURY (vault owner)"
 
 head1 "Setup: users, tokens, stake, oracle, Challenge C1"
 SUFFIX=$(rand_suffix)
@@ -88,12 +91,21 @@ tx "$POOL" "$POOL" set_account_staked_balance "$(j --arg a "$USER_B" --arg n "$(
 assert_eq "B staked NEAR (yocto)" \
   "$(view "$POOL" get_account_staked_balance "$(j --arg a "$USER_B" '{account_id:$a}')" | jq -r .)" "$(near_yocto 500)"
 
-# Reset the oracle to $1.00 so the run is reproducible.
+# Reset the oracle to $1.00 so the run is reproducible. A previous run leaves
+# the price at $1.60, and the TWAP only settles once a full window has passed,
+# so wait for it: lock A's reference price must be exactly $1.00.
 tx "$ORACLE" "$ORACLE" set_price "$(j --arg t "$TOKEN" --arg p "$PRICE_1" '{token:$t,price:$p}')" '30 Tgas' '0 NEAR'
-say "  oracle spot \$1.00, TWAP($TWAP_WINDOW s) = $(twap)"
+if [ "$(twap)" != "$PRICE_1" ]; then
+  say "  TWAP($TWAP_WINDOW s) is $(twap), waiting up to $((TWAP_WINDOW + 20))s for it to settle at \$1.00..."
+  for _ in $(seq 1 $(( (TWAP_WINDOW + 20) / 5 ))); do
+    sleep 5
+    [ "$(twap)" != "$PRICE_1" ] || break
+  done
+fi
+assert_eq "oracle TWAP($TWAP_WINDOW s) at \$1.00" "$(twap)" "$PRICE_1"
 
 DEADLINE=$(( $(now_ts) + DEADLINE_SEC ))
-tx "$VAULT" "$VAULT" create_challenge "$(j --arg t "$TOKEN" --arg th "$THRESHOLD" --argjson d "$DEADLINE" \
+tx "$TREASURY" "$VAULT" create_challenge "$(j --arg t "$TOKEN" --arg th "$THRESHOLD" --argjson d "$DEADLINE" \
   '{params:{title:"Hold the line",token:$t,threshold_amount:$th,deadline_ts:$d,min_lock_duration_sec:5,sponsor_token:$t,boost_reserve_bps:2000}}')" '30 Tgas' '0 NEAR'
 CID=$(tx_value)
 show_events
@@ -119,7 +131,7 @@ assert_eq "lock A amount" "$(lock "$LOCK_A" | jq -r .amount)" "$A_AMOUNT"
 assert_eq "lock A tranches" "$(lock "$LOCK_A" | jq -r '.tranches | length')" "3"
 assert_eq "lock A tranche fractions" "$(lock "$LOCK_A" | jq -c '[.tranches[].fraction_bps]')" "[5000,2500,2500]"
 assert_eq "lock A penalty sink" "$(lock "$LOCK_A" | jq -c .penalty_sink)" "{\"challenge\":$CID}"
-assert_eq "lock A reference_price" "$(lock "$LOCK_A" | jq -r .reference_price)" "$(twap)"
+assert_eq "lock A reference_price (\$1.00 TWAP at creation)" "$(lock "$LOCK_A" | jq -r .reference_price)" "$PRICE_1"
 assert_eq "lock A status" "$(lock "$LOCK_A" | jq -r .status)" "active"
 
 head1 "Step 2: B locks 50k CSTEST into C1 (500 NEAR staked -> 1.25x boost)"
