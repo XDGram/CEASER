@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useWallet } from "../../lib/wallet";
 import { useProtocol } from "../../lib/protocol";
 import { short, mult } from "../../lib/near";
 import { Mark } from "../../components/Mark";
 import { Pfp } from "../../components/Pfp";
+import { profilePath } from "../../lib/profile";
 
 const tabs = [
   ["Overview", "/app", true],
@@ -18,10 +19,12 @@ export function AppShell() {
   const { ready, accountId, connect, disconnect } = useWallet();
   const { boostBps, reachable } = useProtocol();
   const navigate = useNavigate();
+  // Profiles are public: anyone can read /app/u/:account without a wallet.
+  const publicPage = useLocation().pathname.startsWith("/app/u/");
 
   useEffect(() => {
-    if (ready && !accountId) navigate("/", { replace: true });
-  }, [ready, accountId, navigate]);
+    if (ready && !accountId && !publicPage) navigate("/", { replace: true });
+  }, [ready, accountId, publicPage, navigate]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -43,10 +46,15 @@ export function AppShell() {
           <div className="flex items-center gap-2 shrink-0">
             <span className="pill hidden md:inline-flex">boost {mult(boostBps)}</span>
             {accountId ? (
-              <button className="btn btn-outline btn-sm font-mono !pl-1.5 flex items-center gap-2" onClick={disconnect} title="Disconnect">
-                <Pfp id={accountId} size={20} />
-                {short(accountId, 20)}
-              </button>
+              <>
+                <Link to={profilePath(accountId)} className="btn btn-outline btn-sm font-mono !pl-1.5 flex items-center gap-2" title="Your profile">
+                  <Pfp id={accountId} size={20} />
+                  {short(accountId, 20)}
+                </Link>
+                <button className="btn btn-ghost btn-sm !px-2" onClick={disconnect} title="Disconnect">
+                  Sign out
+                </button>
+              </>
             ) : (
               <button className="btn btn-primary btn-sm" onClick={connect}>
                 Connect

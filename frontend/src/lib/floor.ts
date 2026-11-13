@@ -122,17 +122,7 @@ export async function loadFeed(filter: FeedFilter, viewer: string | null, challe
     viewer ? supabase.from("reactions").select("post_id, kind").eq("account", viewer) : Promise.resolve({ data: [] as { post_id: string; kind: string }[] }),
   ]);
 
-  const stats = new Map<string, StatRow>(((statRows ?? []) as StatRow[]).map((s) => [s.id, s]));
-  const myMap = new Map<string, "diamond" | "cope">(((mine ?? []) as { post_id: string; kind: "diamond" | "cope" }[]).map((r) => [r.post_id, r.kind]));
-  const decorate = (r: PostRow): FloorPost => ({
-    ...r,
-    meta: r.meta ?? {},
-    diamonds: stats.get(r.id)?.diamonds ?? 0,
-    copes: stats.get(r.id)?.copes ?? 0,
-    myReaction: myMap.get(r.id) ?? null,
-    replies: [],
-    derived: false,
-  });
+  const decorate = decorator(statRows, mine);
 
   const byParent = new Map<string, FloorPost[]>();
   for (const r of (replyRows ?? []) as PostRow[]) {
@@ -151,6 +141,59 @@ export async function loadFeed(filter: FeedFilter, viewer: string | null, challe
   const merged = [...posts, ...derived].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
   const names = Object.fromEntries(((profileRows ?? []) as { account: string; display_name: string }[]).map((p) => [p.account, p.display_name]));
   return { posts: merged, names, locks };
+}
+
+type ReactionRow = { post_id: string; kind: "diamond" | "cope" };
+
+function decorator(statRows: unknown, mine: unknown): (r: PostRow) => FloorPost {
+  const stats = new Map<string, StatRow>(((statRows ?? []) as StatRow[]).map((s) => [s.id, s]));
+  const myMap = new Map<string, "diamond" | "cope">(((mine ?? []) as ReactionRow[]).map((r) => [r.post_id, r.kind]));
+  return (r: PostRow): FloorPost => ({
+    ...r,
+    meta: r.meta ?? {},
+    diamonds: stats.get(r.id)?.diamonds ?? 0,
+    copes: stats.get(r.id)?.copes ?? 0,
+    myReaction: myMap.get(r.id) ?? null,
+    replies: [],
+    derived: false,
+  });
+}
+
+/** Display names for every account that set one. */
+export async function loadNames(): Promise<Record<string, string>> {
+  const { data } = await supabase.from("profiles").select("account, display_name");
+  return Object.fromEntries(((data ?? []) as { account: string; display_name: string }[]).map((p) => [p.account, p.display_name]));
+}
+
+/** ISO time of the account's first Floor post, or null. */
+export async function firstPostAt(account: string): Promise<string | null> {
+  const { data } = await supabase.from("posts").select("created_at").eq("author", account).order("created_at", { ascending: true }).limit(1);
+  return (data?.[0] as { created_at: string } | undefined)?.created_at ?? null;
+}
+
+/**
+ * Every stored post by one account, newest first: top-level posts with their
+ * replies attached, and the account's own replies to other posts as cards.
+ */
+export async function loadAuthorPosts(author: string, viewer: string | null): Promise<FloorPost[]> {
+  const [{ data: rows, error }, { data: statRows }, { data: mine }] = await Promise.all([
+    supabase.from("posts").select("*").eq("author", author).order("created_at", { ascending: false }).limit(100),
+    supabase.from("post_stats").select("*"),
+    viewer ? supabase.from("reactions").select("post_id, kind").eq("account", viewer) : Promise.resolve({ data: [] as ReactionRow[] }),
+  ]);
+  if (error) throw new Error(error.message);
+  const own = (rows ?? []) as PostRow[];
+  const topIds = own.filter((r) => r.parent_id === null).map((r) => r.id);
+  const { data: replyRows } = topIds.length
+    ? await supabase.from("posts").select("*").in("parent_id", topIds).order("created_at", { ascending: true })
+    : { data: [] as PostRow[] };
+  const decorate = decorator(statRows, mine);
+  const byParent = new Map<string, FloorPost[]>();
+  for (const r of (replyRows ?? []) as PostRow[]) {
+    const d = decorate(r);
+    byParent.set(r.parent_id as string, [...(byParent.get(r.parent_id as string) ?? []), d]);
+  }
+  return own.map((r) => ({ ...decorate(r), replies: r.parent_id === null ? (byParent.get(r.id) ?? []) : [] }));
 }
 
 export async function createPost(p: { author: string; kind: PostKind; body: string; challenge_id?: number | null; lock_id?: number | null; parent_id?: string | null }): Promise<void> {

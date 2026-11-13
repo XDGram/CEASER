@@ -6,6 +6,8 @@ import { useWallet } from "../../lib/wallet";
 import { Composer, PostCard, useAutoRefresh } from "../../components/FloorFeed";
 import { Pfp } from "../../components/Pfp";
 import { SectionHead } from "../../components/SectionHead";
+import { Link } from "react-router-dom";
+import { profilePath } from "../../lib/profile";
 
 const FILTERS: { label: string; kind?: PostKind }[] = [
   { label: "All" },
@@ -77,8 +79,12 @@ export function Community() {
               {leaders.map(([owner, w], i) => (
                 <div key={owner} className="flex items-center gap-2.5">
                   <span className="pixel text-[11px] text-ink-3 w-3">{i + 1}</span>
-                  <Pfp id={owner} size={24} />
-                  <span className="text-[12px] text-ink truncate flex-1">{data?.names[owner] ?? short(owner, 20)}</span>
+                  <Link to={profilePath(owner)} className="shrink-0" title={owner}>
+                    <Pfp id={owner} size={24} />
+                  </Link>
+                  <Link to={profilePath(owner)} className="text-[12px] text-ink truncate flex-1 hover:underline underline-offset-4">
+                    {data?.names[owner] ?? short(owner, 20)}
+                  </Link>
                   <div className="h-1 w-16 rounded-full bg-paper-2 overflow-hidden shrink-0">
                     <div className="h-full bg-accent" style={{ width: `${Math.max(6, Number((w * 100n) / totalWeight))}%` }} />
                   </div>
@@ -93,10 +99,15 @@ export function Community() {
             <div className="mt-3 flex flex-col divide-y divide-line">
               {pledges.map((p) => (
                 <div key={p.id} className="py-2 flex items-start gap-2.5">
-                  <Pfp id={p.author} size={22} />
+                  <Link to={profilePath(p.author)} className="shrink-0" title={p.author}>
+                    <Pfp id={p.author} size={22} />
+                  </Link>
                   <div className="min-w-0">
                     <div className="text-[12px] text-ink-2 leading-snug break-words">
-                      <span className="text-ink font-medium">{data?.names[p.author] ?? short(p.author, 18)}</span> {p.body}
+                      <Link to={profilePath(p.author)} className="text-ink font-medium hover:underline underline-offset-4">
+                        {data?.names[p.author] ?? short(p.author, 18)}
+                      </Link>{" "}
+                      {p.body}
                     </div>
                     <div className="text-[10.5px] text-ink-3 mt-0.5">{timeAgo(p.created_at)}</div>
                   </div>

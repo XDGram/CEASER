@@ -11,6 +11,7 @@ import { Pfp } from "../../components/Pfp";
 import { Composer, PostCard, useAutoRefresh } from "../../components/FloorFeed";
 import { convictionByOwner, loadFeed, type FeedData } from "../../lib/floor";
 import { RewardEstimate } from "../../components/RewardEstimate";
+import { profilePath } from "../../lib/profile";
 
 function Progress({ value, max }: { value: bigint; max: bigint }) {
   const p = max > 0n ? Math.min(100, Number((value * 1000n) / max) / 10) : 0;
@@ -130,7 +131,10 @@ export function ChallengeDetail() {
           </div>
           <h1 className="mt-1 text-[26px] sm:text-[32px] tracking-tight leading-tight">{c.title}</h1>
           <div className="mt-1 text-[12.5px] text-ink-2">
-            created by <span className="font-mono text-[11.5px]">{short(c.creator, 34)}</span>
+            created by{" "}
+            <Link to={profilePath(c.creator)} className="font-mono text-[11.5px] hover:text-ink underline-offset-4 hover:underline">
+              {short(c.creator, 34)}
+            </Link>
           </div>
         </div>
         <div className="flex gap-2">
@@ -182,10 +186,14 @@ export function ChallengeDetail() {
                   return (
                     <div key={l.id} className="py-3 grid grid-cols-[18px_30px_minmax(0,1fr)_auto] items-center gap-3 text-[13px]">
                       <span className="pixel text-[12px] text-ink-3">{i + 1}</span>
-                      <Pfp id={l.owner} size={30} />
+                      <Link to={profilePath(l.owner)} title={l.owner}>
+                        <Pfp id={l.owner} size={30} />
+                      </Link>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-[12px] text-ink truncate max-w-full">{short(l.owner, 30)}</span>
+                          <Link to={profilePath(l.owner)} className="font-mono text-[12px] text-ink truncate max-w-full hover:underline underline-offset-4">
+                            {short(l.owner, 30)}
+                          </Link>
                           {tier && <span className="pill border-accent/50 text-accent-2">boost {tier}</span>}
                         </div>
                         <div className="text-[11.5px] text-ink-2">
@@ -209,7 +217,7 @@ export function ChallengeDetail() {
               <div className="mt-2 divide-y divide-line">
                 {exited.map((l) => (
                   <div key={l.id} className="py-2 flex items-center justify-between gap-3 text-[12.5px]">
-                    <span className="flex items-center gap-2 min-w-0"><Pfp id={l.owner} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0 max-w-full">{short(l.owner, 30)}</span></span>
+                    <Link to={profilePath(l.owner)} className="flex items-center gap-2 min-w-0 hover:text-ink" title={l.owner}><Pfp id={l.owner} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0 max-w-full">{short(l.owner, 30)}</span></Link>
                     <span className="text-bad whitespace-nowrap">
                       paid {fromUnits(BigInt(l.amount) - BigInt(l.claimed_amount), tm.decimals, 0)} {tm.symbol}
                     </span>
@@ -237,7 +245,7 @@ export function ChallengeDetail() {
                 <div className="divide-y divide-line">
                   {sponsors.map((s) => (
                     <div key={s.account} className="py-2 flex items-center justify-between gap-3 text-[12.5px]">
-                      <span className="flex items-center gap-2 min-w-0"><Pfp id={s.account} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0">{short(s.account, 28)}</span></span>
+                      <Link to={profilePath(s.account)} className="flex items-center gap-2 min-w-0" title={s.account}><Pfp id={s.account} size={20} /><span className="font-mono text-[11.5px] text-ink-2 truncate min-w-0 hover:text-ink">{short(s.account, 28)}</span></Link>
                       <span className="text-ink whitespace-nowrap">
                         {fromUnits(s.amount, sm.decimals, 0)} {sm.symbol}
                       </span>

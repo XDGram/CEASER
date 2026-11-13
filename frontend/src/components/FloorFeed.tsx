@@ -6,6 +6,7 @@ import { fmtDur, fromUnits, short, timeAgo } from "../lib/near";
 import { createPost, toggleReaction, type ConvictionInfo, type FloorPost, type PostKind } from "../lib/floor";
 import { errorText, useWallet } from "../lib/wallet";
 import { Pfp } from "./Pfp";
+import { profilePath } from "../lib/profile";
 import { Busy } from "./SectionHead";
 
 // Pixel glyphs for reactions, drawn in the page palette: a diamond for
@@ -52,7 +53,9 @@ export function KindTag({ kind }: { kind: PostKind }) {
 export function AccountLine({ account, names, conviction }: { account: string; names: Record<string, string>; conviction?: ConvictionInfo }) {
   return (
     <span className="flex items-center gap-2 min-w-0 flex-wrap">
-      <span className="text-[13px] font-medium text-ink truncate">{names[account] ?? short(account, 22)}</span>
+      <Link to={profilePath(account)} className="text-[13px] font-medium text-ink truncate hover:underline underline-offset-4">
+        {names[account] ?? short(account, 22)}
+      </Link>
       {names[account] && <span className="font-mono text-[10.5px] text-ink-3 truncate hidden sm:inline">{short(account, 24)}</span>}
       {conviction && conviction.lockedNow > 0n && (
         <span className="pill border-ok/40 text-ok !normal-case !tracking-normal">
@@ -131,7 +134,9 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
   return (
     <motion.article initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="card p-4 sm:p-5">
       <div className="flex items-start gap-3">
-        <Pfp id={post.author} size={34} />
+        <Link to={profilePath(post.author)} className="shrink-0" title={post.author}>
+          <Pfp id={post.author} size={34} />
+        </Link>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <AccountLine account={post.author} names={names} conviction={conviction} />
@@ -159,10 +164,14 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
             <div className="mt-3 border-l border-line pl-4 flex flex-col gap-3">
               {post.replies.map((r) => (
                 <div key={r.id} className="flex items-start gap-2.5">
-                  <Pfp id={r.author} size={24} />
+                  <Link to={profilePath(r.author)} className="shrink-0" title={r.author}>
+                    <Pfp id={r.author} size={24} />
+                  </Link>
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-[12.5px] font-medium text-ink">{names[r.author] ?? short(r.author, 22)}</span>
+                      <Link to={profilePath(r.author)} className="text-[12.5px] font-medium text-ink hover:underline underline-offset-4">
+                        {names[r.author] ?? short(r.author, 22)}
+                      </Link>
                       <span className="text-[10.5px] text-ink-3">{timeAgo(r.created_at)}</span>
                     </div>
                     <p className="text-[13px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words">{r.body}</p>
