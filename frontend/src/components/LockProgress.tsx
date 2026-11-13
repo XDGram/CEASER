@@ -4,15 +4,25 @@ import { Mark } from "./Mark";
 
 export type LockStage = { kind: "signing" } | { kind: "confirming"; hash?: string | null } | { kind: "done"; lockId: number; hash?: string | null } | { kind: "failed"; reason: string; hash?: string | null };
 
-export function LockProgress({ stage, label, onDismiss }: { stage: LockStage; label: string; onDismiss: () => void }) {
-  const done = stage.kind === "done";
-  const failed = stage.kind === "failed";
-  const hash = "hash" in stage ? stage.hash : null;
-  const title = stage.kind === "signing" ? "Waiting for your wallet" : stage.kind === "confirming" ? `Locking ${label}` : done ? `Locked ${label}` : "Lock not created";
-  const sub = stage.kind === "signing" ? "Approve the transaction to continue." : stage.kind === "confirming" ? "Confirming on NEAR. This takes a few seconds." : done ? `Lock #${stage.lockId} is yours. Taking you to it.` : stage.reason;
+export type FlowPhase = "pending" | "done" | "failed";
 
+/** The lock flow's stages, mapped onto the shared progress view. */
+export function LockProgress({ stage, label, onDismiss }: { stage: LockStage; label: string; onDismiss: () => void }) {
+  const phase: FlowPhase = stage.kind === "done" ? "done" : stage.kind === "failed" ? "failed" : "pending";
+  const title = stage.kind === "signing" ? "Waiting for your wallet" : stage.kind === "confirming" ? `Locking ${label}` : stage.kind === "done" ? `Locked ${label}` : "Lock not created";
+  const sub = stage.kind === "signing" ? "Approve the transaction to continue." : stage.kind === "confirming" ? "Confirming on NEAR. This takes a few seconds." : stage.kind === "done" ? `Lock #${stage.lockId} is yours. Taking you to it.` : stage.reason;
+  return <FlowProgress phase={phase} title={title} sub={sub} hash={"hash" in stage ? stage.hash : null} onDismiss={onDismiss} />;
+}
+
+/**
+ * Ring, mark and check-or-cross progress view shared by the lock and exit
+ * flows. `bare` drops the card chrome so it can sit inside a dialog.
+ */
+export function FlowProgress({ phase, title, sub, hash, onDismiss, dismissLabel = "Back to the form", bare = false }: { phase: FlowPhase; title: string; sub: string; hash?: string | null; onDismiss?: () => void; dismissLabel?: string; bare?: boolean }) {
+  const done = phase === "done";
+  const failed = phase === "failed";
   return (
-    <div className="card p-10 sm:p-14 min-h-[420px] flex flex-col items-center justify-center text-center">
+    <div className={`${bare ? "py-6" : "card p-10 sm:p-14 min-h-[420px]"} flex flex-col items-center justify-center text-center`} role="status" aria-live="polite">
       <div className="relative h-[120px] w-[120px]">
         <svg viewBox="0 0 120 120" className="absolute inset-0 h-full w-full" aria-hidden>
           <circle cx="60" cy="60" r="54" fill="none" stroke="var(--color-line)" strokeWidth="1.5" />
@@ -54,7 +64,7 @@ export function LockProgress({ stage, label, onDismiss }: { stage: LockStage; la
           </AnimatePresence>
         </div>
       </div>
-      <motion.h3 key={stage.kind} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-8 text-[22px] text-ink">
+      <motion.h3 key={title} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-8 text-[22px] text-ink">
         {title}
       </motion.h3>
       <p className={`mt-2 max-w-[360px] text-[13.5px] leading-relaxed ${failed ? "text-bad" : "text-ink-2"}`}>{sub}</p>
@@ -63,9 +73,9 @@ export function LockProgress({ stage, label, onDismiss }: { stage: LockStage; la
           {hash.slice(0, 10)}… on explorer
         </a>
       )}
-      {failed && (
+      {failed && onDismiss && (
         <button className="btn btn-outline mt-6" onClick={onDismiss}>
-          Back to the form
+          {dismissLabel}
         </button>
       )}
     </div>

@@ -7,6 +7,8 @@ import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Condition, Lock, Tranche } from "../lib/types";
 import { Busy, SectionHead } from "./SectionHead";
+import { ExitDialog, type ExitResume, type ExitStage } from "./ExitDialog";
+import { takePendingExit } from "../lib/exit";
 
 function condText(c: Condition, lock: Lock, decimals: number): string {
   if ("price_above" in c) {
@@ -32,7 +34,7 @@ function trancheStatus(t: Tranche, lock: Lock, cooldown: number): { label: strin
   return { label: "not met", cls: "tag-muted" };
 }
 
-function LockCard({ lock, highlight = false }: { lock: Lock; highlight?: boolean }) {
+function LockCard({ lock, highlight = false, highlightLabel = "just locked", onExit }: { lock: Lock; highlight?: boolean; highlightLabel?: string; onExit?: (lock: Lock) => void }) {
   const { meta, config, refresh, refreshUser, challenges } = useProtocol();
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -82,12 +84,13 @@ function LockCard({ lock, highlight = false }: { lock: Lock; highlight?: boolean
         <div>
           <div className="text-[11px] font-mono text-ink-3">
             Lock #{lock.id}
-            {highlight && <span className="ml-2 tag tag-ok">just locked</span>} · {fmtDate(lock.start_ts)}
+            {highlight && <span className={`ml-2 tag ${highlightLabel === "just exited" ? "tag-muted" : "tag-ok"}`}>{highlightLabel}</span>} · {fmtDate(lock.start_ts)}
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="pixel text-[24px]">{fromUnits(remaining, tm.decimals, 0)}</span>
             <span className="text-[12px] text-ink-2">
-              {tm.symbol} remaining of {fromUnits(lock.amount, tm.decimals, 0)}
+              {/* For an exited lock, amount minus claimed is the penalty it paid, not a balance. */}
+              {lock.status === "exited" ? `${tm.symbol} paid as penalty on ${fromUnits(lock.amount, tm.decimals, 0)}` : `${tm.symbol} remaining of ${fromUnits(lock.amount, tm.decimals, 0)}`}
             </span>
           </div>
         </div>
@@ -147,20 +150,8 @@ function LockCard({ lock, highlight = false }: { lock: Lock; highlight?: boolean
             >
               <Busy on={busy === "claim"}>Claim</Busy>
             </button>
-            <button
-              className="btn btn-danger btn-sm"
-              disabled={busy !== null}
-              onClick={() => {
-                const penalty = (remaining * BigInt(lock.penalty_bps)) / 10000n;
-                if (!window.confirm(`Exit lock #${lock.id} now? Up to ${fromUnits(penalty, tm.decimals)} ${tm.symbol} (${pct(lock.penalty_bps)}) goes to the penalty sink.`)) return;
-                run("exit", async () => {
-                  const out = await call(CONFIG.contracts.vault, "early_exit", { lock_id: lock.id }, CONFIG.gas.call);
-                  const v = decodeResult<{ returned: string; penalty: string }>(out);
-                  if (v) toast(`Returned ${fromUnits(v.returned, tm.decimals)} ${tm.symbol}, penalty ${fromUnits(v.penalty, tm.decimals)}`, "ok");
-                });
-              }}
-            >
-              <Busy on={busy === "exit"}>Early exit · {pct(lock.penalty_bps)}</Busy>
+            <button className="btn btn-danger btn-sm" disabled={busy !== null} onClick={() => onExit?.(lock)}>
+              Early exit · {pct(lock.penalty_bps)}
             </button>
             <span className="text-[12px] text-ink-2">
               {committed
@@ -183,7 +174,41 @@ export function ClaimSection() {
   const [params] = useSearchParams();
   const newId = Number(params.get("new") ?? 0);
   const open = locks.filter((l) => l.status === "active").sort((a, b) => (a.id === newId ? -1 : b.id === newId ? 1 : 0));
-  const done = locks.filter((l) => l.status !== "active");
+  const [exitedId, setExitedId] = useState<number | null>(null);
+  const done = locks.filter((l) => l.status !== "active").sort((a, b) => (a.id === exitedId ? -1 : b.id === exitedId ? 1 : 0));
+  const { returnedTx } = useWallet();
+
+  // Early exit runs in a dialog. `exiting` holds the lock being exited plus
+  // how to open the dialog: fresh, resuming after a wallet redirect, or failed.
+  const [exiting, setExiting] = useState<{ lock: Lock; resume?: ExitResume; stage?: ExitStage } | null>(null);
+  const [closedOpen, setClosedOpen] = useState(false);
+
+  // Resume after a MyNearWallet redirect, as the lock flow does.
+  const resumeTried = useRef(false);
+  useEffect(() => {
+    if (resumeTried.current || !returnedTx || !accountId) return;
+    resumeTried.current = true;
+    const pending = takePendingExit();
+    if (!pending) return;
+    view<Lock | null>(CONFIG.contracts.vault, "get_lock", { lock_id: pending.lockId })
+      .then((lock) => {
+        if (!lock) return;
+        if (returnedTx.error) setExiting({ lock, stage: { kind: "failed", reason: returnedTx.error } });
+        else setExiting({ lock, resume: { hash: returnedTx.hash, claimedBefore: pending.claimedBefore, sinkLabel: pending.sinkLabel } });
+      })
+      .catch(() => undefined);
+  }, [returnedTx, accountId]);
+
+  const onExitClosed = (exited: boolean) => {
+    const id = exiting?.lock.id ?? null;
+    setExiting(null);
+    if (exited && id !== null) {
+      setExitedId(id);
+      setClosedOpen(true);
+      void refreshUser();
+      window.setTimeout(() => setExitedId((x) => (x === id ? null : x)), 4000);
+    }
+  };
 
   return (
     <section id="claim" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
@@ -208,23 +233,24 @@ export function ClaimSection() {
       />
       <div className="mt-6 grid lg:grid-cols-2 gap-4">
         {open.map((l) => (
-          <LockCard key={l.id} lock={l} highlight={l.id === newId} />
+          <LockCard key={l.id} lock={l} highlight={l.id === newId} onExit={(lock) => setExiting({ lock })} />
         ))}
         {accountId && !locks.length && <div className="card p-8 text-[13px] text-ink-2 lg:col-span-2">No locks yet for this account. Create one above.</div>}
         {!accountId && <div className="card p-8 text-[13px] text-ink-2 lg:col-span-2">Connect a wallet to see your locks.</div>}
       </div>
       {done.length > 0 && (
-        <details className="mt-4">
+        <details className="mt-4" open={closedOpen} onToggle={(e) => setClosedOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary className="cursor-pointer text-[12px] text-ink-2 hover:text-ink">
             {done.length} closed or exited lock{done.length === 1 ? "" : "s"}
           </summary>
           <div className="mt-4 grid lg:grid-cols-2 gap-4">
             {done.map((l) => (
-              <LockCard key={l.id} lock={l} />
+              <LockCard key={l.id} lock={l} highlight={l.id === exitedId} highlightLabel="just exited" />
             ))}
           </div>
         </details>
       )}
+      {exiting && <ExitDialog key={exiting.lock.id} lock={exiting.lock} resume={exiting.resume} initialStage={exiting.stage} onClose={onExitClosed} />}
     </section>
   );
 }
