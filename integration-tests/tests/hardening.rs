@@ -710,3 +710,42 @@ async fn challenge_edge_cases() -> anyhow::Result<()> {
     assert_eq!(env.balance_of(env.vault.id()).await?, 0, "the vault holds nothing it does not owe");
     Ok(())
 }
+
+#[tokio::test]
+async fn owner_handover_default_sink_fallback_and_late_sponsoring() -> anyhow::Result<()> {
+    let env = Env::new().await?;
+    let bob = env.user(10_000).await?;
+
+    // Only the owner can hand the treasury role to another account.
+    assert!(env.call(&bob, "set_owner", json!({"owner_id": bob.id()})).await?.is_failure());
+    let treasury = env.user(0).await?;
+    ok(env.call(&env.owner, "set_owner", json!({"owner_id": treasury.id()})).await?);
+    assert_eq!(env.view("get_owner", json!({})).await?, json!(treasury.id()));
+    assert!(env.call(&env.owner, "set_owner", json!({"owner_id": env.owner.id()})).await?.is_failure());
+
+    // Joining a challenge whose pool token differs works with the default sink,
+    // which falls back to the treasury.
+    let token2 = env.worker.dev_deploy(&std::fs::read("../res/test_token.wasm")?).await?;
+    ok(token2.call("new").args_json(json!({"owner_id": token2.id(), "total_supply": "0",
+        "name": "Other", "symbol": "OTHER", "decimals": 18})).transact().await?);
+    let deadline = env.now().await? + 60;
+    let mixed = env.create_challenge_with(tok(1_000), deadline, 5, token2.id().clone()).await?;
+    let lock_id = env.lock(&bob, tok(1_000), challenge_params(mixed, None)).await?;
+    let lock = env.view("get_lock", json!({"lock_id": lock_id})).await?;
+    assert_eq!(lock["penalty_sink"], json!({"account": treasury.id()}));
+    let exit: Value = ok(env.call(&bob, "early_exit", json!({"lock_id": lock_id})).await?).json()?;
+    assert_eq!(u(&exit["penalty"]), tok(200));
+    assert_eq!(env.balance(&treasury).await?, tok(200), "penalty reaches the new treasury");
+
+    // Sponsoring is closed once the deadline has passed, even before finalize.
+    let deadline = env.now().await? + 20;
+    let cid = env.create_challenge(tok(1_000), deadline).await?;
+    ok(env.deposit(&bob, tok(100), json!({"sponsor": {"challenge_id": cid}})).await?);
+    env.advance_to(deadline).await?;
+    let before = env.balance(&bob).await?;
+    env.deposit(&bob, tok(100), json!({"sponsor": {"challenge_id": cid}})).await?;
+    assert_eq!(env.balance(&bob).await?, before, "late sponsor deposit is refunded");
+    let ch = env.view("get_challenge", json!({"challenge_id": cid})).await?;
+    assert_eq!(u(&ch["sponsor_total"]), tok(100));
+    Ok(())
+}

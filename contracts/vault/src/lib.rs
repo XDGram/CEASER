@@ -106,6 +106,11 @@ impl Vault {
         self.staking_pools.remove(&pool_id);
     }
 
+    pub fn set_owner(&mut self, owner_id: AccountId) {
+        self.assert_owner();
+        self.owner_id = owner_id;
+    }
+
     pub fn set_oracle(&mut self, oracle_id: AccountId) {
         self.assert_owner();
         self.oracle_id = oracle_id;
@@ -192,7 +197,10 @@ impl Vault {
         match msg {
             TransferMsg::Sponsor { challenge_id } => {
                 let mut ch = self.challenge(challenge_id);
-                require!(ch.state == ChallengeState::Active, "Challenge is not active");
+                require!(
+                    ch.state == ChallengeState::Active && now() < ch.deadline_ts,
+                    "Challenge is no longer open for sponsoring"
+                );
                 require!(ch.sponsor_token == token, "Wrong sponsor token");
                 ch.sponsor_total.0 += amount.0;
                 let key = (challenge_id, sender_id.clone());
@@ -666,9 +674,10 @@ impl Vault {
             self.challenges.insert(cid, ch);
         }
 
+        // Default sink: the lock's own challenge when its pool takes this token, else the treasury.
         let penalty_sink = params.penalty_sink.unwrap_or_else(|| match challenge_id {
-            Some(cid) => PenaltySink::Challenge(cid),
-            None => PenaltySink::Account(self.owner_id.clone()),
+            Some(cid) if self.challenge(cid).sponsor_token == token => PenaltySink::Challenge(cid),
+            _ => PenaltySink::Account(self.owner_id.clone()),
         });
         if let PenaltySink::Challenge(cid) = penalty_sink {
             require!(

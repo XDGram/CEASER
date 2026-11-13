@@ -215,7 +215,7 @@ cargo test -p integration-tests
 `build.sh` writes `res/ceaser_vault.wasm`, `res/test_token.wasm`,
 `res/mock_oracle.wasm` and `res/mock_staking_pool.wasm`. The tests deploy those
 to a local near-workspaces sandbox (downloaded on first run) and cover seven
-flows:
+core flows:
 
 | Test | What it proves |
 |---|---|
@@ -226,6 +226,17 @@ flows:
 | `early_exit_penalty_funds_the_challenge_pool` | the exit penalty lands in `penalty_total` of the sink Challenge |
 | `participant_exit_leaves_the_challenge` | an exited lock stops counting toward the threshold, and its penalty still pays the remaining locker even though the Challenge then fails |
 | `near_staking_boost_multiplies_reward` | staked NEAR raises the reward by the tier multiplier, out of the reserve |
+
+A second suite, `integration-tests/tests/hardening.rs`, adds 11 adversarial
+tests written during an independent audit pass: double claims and exits, the
+`any` strategy, the max-duration tail guard, oracle outages, failed payouts and
+their recovery, exits around the deadline, and a four-party check that rewards
+never exceed the pool. Both suites run with the command above (18 tests).
+
+Known limits from that audit, accepted for the testnet MVP: creating a
+Challenge needs no storage deposit, so the vault account pays for storage;
+staked NEAR is read at claim time, so a boost can be earned by staking just
+before claiming; rounding dust and unused boost reserve stay in the vault.
 
 Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracle`.
 

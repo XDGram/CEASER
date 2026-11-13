@@ -67,6 +67,7 @@ new(owner_id: AccountId, oracle_id: AccountId, config: Option<Config>)   // #[in
 add_staking_pool(pool_id: AccountId)      // owner only
 remove_staking_pool(pool_id: AccountId)   // owner only
 set_oracle(oracle_id: AccountId)          // owner only
+set_owner(owner_id: AccountId)            // owner only. The owner is also the treasury.
 update_config(config: Config)             // owner only
 ```
 
@@ -101,11 +102,11 @@ All token deposits are `ft_transfer_call(receiver_id = vault, amount, msg)` on t
 }}
 ```
 
-- `penalty_sink: null` defaults to the lock's Challenge if it has one, otherwise the vault owner (treasury).
+- `penalty_sink: null` defaults to the lock's Challenge if it has one and its `sponsor_token` is the locked token, otherwise the vault owner (treasury).
 - `penalty_sink: {"challenge": id}` requires that Challenge's `sponsor_token` to equal the locked token.
 - Invalid params or a failed oracle read refund the full deposit (standard NEP-141 refund).
 
-**Fund a sponsor pool** (must be sent on the Challenge's `sponsor_token`)
+**Fund a sponsor pool** (must be sent on the Challenge's `sponsor_token`, before `deadline_ts`)
 
 ```json
 {"sponsor": {"challenge_id": 1}}
