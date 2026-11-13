@@ -1,6 +1,5 @@
 // CEASER frontend configuration.
-// Mirrors scripts/deployed.json. Replace the placeholder ids after `demo.sh`
-// deploys the contracts, or paste the contents of deployed.json into `contracts`.
+// `contracts` mirrors scripts/deployed.json (the live testnet deployment).
 window.CEASER_CONFIG = {
   network: "testnet",
   nodeUrl: "https://rpc.testnet.near.org",
@@ -8,12 +7,11 @@ window.CEASER_CONFIG = {
   helperUrl: "https://helper.testnet.near.org",
   explorerUrl: "https://testnet.nearblocks.io",
 
-  // Placeholders until scripts/deployed.json exists.
   contracts: {
-    vault: "vault.ceaser.testnet",
-    oracle: "oracle.ceaser.testnet",
-    token: "cstest.ceaser.testnet",
-    staking_pool: "pool.ceaser.testnet",
+    vault: "ceaser-vault-756e8a.testnet",
+    oracle: "ceaser-oracle-756e8a.testnet",
+    token: "ceaser-token-756e8a.testnet",
+    staking_pool: "ceaser-pool-756e8a.testnet",
   },
 
   // Gas and deposits, as strings (yoctoNEAR / gas units).

@@ -290,6 +290,7 @@ async fn collective_threshold_success_pays_pro_rata() -> anyhow::Result<()> {
     let cid = env.create_challenge(tok(100_000), deadline).await?;
     ok(env.deposit(&sponsor, tok(10_000), json!({"sponsor": {"challenge_id": cid}})).await?);
     let bob_lock = env.lock(&bob, tok(60_000), challenge_params(cid, None)).await?;
+    env.advance(5).await?;
     let carol_lock = env.lock(&carol, tok(60_000), challenge_params(cid, None)).await?;
 
     // Committed until the challenge resolves.

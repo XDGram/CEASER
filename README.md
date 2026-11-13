@@ -15,9 +15,13 @@ Built for a NEAR hackathon. Testnet only. **The price oracle is a mock.**
 ./demo.sh
 ```
 
-`demo.sh` builds every contract, deploys the vault, the test token, the mock
-oracle and the mock staking pool to testnet, then plays the full arc and asserts
-each step from view calls and emitted events:
+`demo.sh` plays the full arc on NEAR testnet and asserts every step from view
+calls and emitted events (62 assertions, about 5 minutes). It uses the live
+deployment below when the deployer keys are in the local keychain. From a fresh
+clone it has no such keys, so it first builds every contract and deploys its own
+fresh set with `scripts/deploy.sh` (about 2 more minutes), then runs the same arc.
+It checks its prerequisites up front and prints an install command for anything
+missing.
 
 1. User A locks 100k CSTEST with an ROI ladder 50/25/25 at +50% / +100% / +200%,
    penalty 20% into Challenge C1.
@@ -28,18 +32,26 @@ each step from view calls and emitted events:
    `succeeded`.
 5. User B calls `claim` and receives principal plus the boosted reward.
 
-**Pending:** `demo.sh` and `scripts/deployed.json` are not in the tree yet.
-The testnet account ids and the demo transcript will be added here once
-`demo.sh` has run and written `scripts/deployed.json`:
+Results observed on testnet:
+
+| Step | Observed |
+|---|---|
+| A exits early | 80k CSTEST returned, 20k penalty moved into C1 |
+| Price jumps $1.00 to $1.60 | TWAP read 1.10855 right after the jump and 1.60 only after a full window |
+| `finalize(C1)` | `succeeded`, 16k base pool, 4k boost reserve |
+| B claims | 50k principal + 20k reward at `boost_bps` 12500, reserve left at 0 |
+
+Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json)):
 
 | Contract | Testnet account |
 |---|---|
-| Vault | _pending_ |
-| Test token (CSTEST, 18 decimals) | _pending_ |
-| Mock oracle | _pending_ |
-| Mock staking pool | _pending_ |
+| Vault | `ceaser-vault-756e8a.testnet` |
+| Test token (CSTEST, 18 decimals) | `ceaser-token-756e8a.testnet` |
+| Mock oracle | `ceaser-oracle-756e8a.testnet` |
+| Mock staking pool | `ceaser-pool-756e8a.testnet` |
 
-Until then, the sandbox integration tests below exercise the same flows locally.
+The live vault runs with a 60 second TWAP window and a 30 second cooldown so the
+demo finishes in minutes. The contract defaults are 30 minutes and 10 minutes.
 
 ## What CEASER is
 
@@ -149,7 +161,8 @@ contracts/
   mock-staking-pool/  owner-set get_account_staked_balance, mirrors the core staking pool
 integration-tests/    near-workspaces sandbox tests (integration-tests/tests/flows.rs)
 frontend/             one-page app: index.html + config.js, no build step
-scripts/              testnet deploy and demo (deployed.json written by demo.sh)
+scripts/              testnet deploy script, shared helpers, deployed.json (live account ids)
+demo.sh               the scripted testnet demo arc
 INTERFACE.md          the binding spec for every method and JSON shape
 build.sh              builds every contract and copies wasm to res/
 ```
@@ -220,10 +233,8 @@ Unit tests for the TWAP math live in the oracle crate: `cargo test -p mock-oracl
 and NEAR Wallet Selector (MyNearWallet, Meteor) from CDNs and talks to testnet
 directly.
 
-1. Put the deployed account ids in `frontend/config.js`. They mirror
-   `scripts/deployed.json` once `demo.sh` has run. Until then the page shows a
-   "vault not reachable" notice and still lets you build and preview lock
-   messages.
+1. `frontend/config.js` already points at the live testnet deployment above. To
+   use your own deployment, copy the ids from `scripts/deployed.json` into it.
 2. Serve the folder over HTTP (wallet redirects need a real origin):
 
 ```bash
@@ -251,8 +262,8 @@ shown as local dates.
 
 - **Real oracle.** `RefTwapOracle` is a documented stub. A production deploy
   needs a Ref Finance (or other DEX) TWAP read with on-chain liquidity checks.
-- **demo.sh and testnet ids.** The scripted testnet run and `scripts/deployed.json`
-  are pending; the sandbox tests cover the same arc today.
+- **Pyth integration** for NEAR, BTC or ETH denominated price targets, and a
+  multi-oracle setup with cross-source sanity checks.
 - **Keeper for `check_unlock`.** Someone has to call it twice per price tranche.
   A small bot or a cron-triggered caller is the obvious next step.
 - **Multi-token Challenges.** A Challenge is tied to one lock token and one
@@ -263,7 +274,11 @@ shown as local dates.
   updates config directly. No DAO, no timelock.
 - **Frontend polish.** Component styling is placeholder; event history,
   per-tranche countdowns and a sponsor leaderboard are not built.
-- **Audit.** None. Testnet only.
+- **Transferable lock positions** (lock as NFT) and a public sell-schedule
+  dashboard showing when locked supply can unlock.
+- **Sputnik DAO integration** so community treasuries can sponsor Challenges.
+- **No native token.** CEASER deliberately does not have one.
+- **External audit.** None yet. Testnet only.
 
 ## License
 
