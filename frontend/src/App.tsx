@@ -7,6 +7,7 @@ import { AppShell } from "./pages/app/AppShell";
 import { Overview } from "./pages/app/Overview";
 import { LockSection } from "./components/LockSection";
 import { ChallengesSection } from "./components/ChallengesSection";
+import { ChallengeDetail } from "./pages/app/ChallengeDetail";
 import { ClaimSection } from "./components/ClaimSection";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
               <Route index element={<Overview />} />
               <Route path="lock" element={<LockSection />} />
               <Route path="challenges" element={<ChallengesSection />} />
+              <Route path="challenges/:id" element={<ChallengeDetail />} />
               <Route path="locks" element={<ClaimSection />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

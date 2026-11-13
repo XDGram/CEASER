@@ -1,12 +1,13 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CONFIG } from "../config";
 import { countdown, datetimeToTs, decodeResult, fmtDate, fmtDur, fromUnits, localDatetimeValue, nowTs, pct, toUnits } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Challenge } from "../lib/types";
 import { Busy, SectionHead } from "./SectionHead";
+import { RewardEstimate } from "./RewardEstimate";
 
 function Progress({ value, max }: { value: bigint; max: bigint }) {
   const p = max > 0n ? Math.min(100, Number((value * 1000n) / max) / 10) : 0;
@@ -54,7 +55,11 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-mono text-ink-3">#{c.id}</div>
-          <h3 className="text-[17px] tracking-tight text-ink leading-tight">{c.title}</h3>
+          <h3 className="text-[17px] tracking-tight leading-tight">
+            <Link to={`/app/challenges/${c.id}`} className="text-ink hover:underline underline-offset-4">
+              {c.title}
+            </Link>
+          </h3>
         </div>
         <StateTag c={c} />
       </div>
@@ -93,6 +98,8 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
           <div className="text-ink">{pct(c.boost_reserve_bps)}</div>
         </div>
       </div>
+
+      <RewardEstimate c={c} />
 
       <div className="mt-auto flex flex-wrap gap-2 pt-1">
         {canJoin && (
@@ -135,6 +142,9 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
             <Busy on={busy === "refund"}>Refund my sponsorship</Busy>
           </button>
         )}
+        <Link to={`/app/challenges/${c.id}`} className="btn btn-outline btn-sm">
+          Details
+        </Link>
       </div>
     </motion.div>
   );
@@ -170,6 +180,8 @@ export function ChallengesSection() {
         boost_reserve_bps: Math.round(parseFloat(reserve || "0") * 100),
       };
       if (params.deadline_ts <= nowTs()) throw new Error("Deadline must be in the future");
+      if (params.deadline_ts - nowTs() < params.min_lock_duration_sec)
+        throw new Error(`Deadline must be at least ${fmtDur(params.min_lock_duration_sec)} away, or nobody can join`);
       if (params.boost_reserve_bps > 5000) throw new Error("Boost reserve is at most 50%");
       const out = await call(CONFIG.contracts.vault, "create_challenge", { params }, CONFIG.gas.createChallenge);
       const id = decodeResult<number>(out);
@@ -247,6 +259,7 @@ export function ChallengesSection() {
               </div>
             </div>
           </div>
+          <CreatePreview title={title} threshold={threshold} deadline={deadline} minLock={minLock} reserve={reserve} symbol={tm.symbol} creator={accountId} />
           <div className="mt-6 flex items-center gap-4">
             <button className="btn btn-accent" disabled={busy} onClick={create}>
               <Busy on={busy}>{accountId ? "Create Challenge" : "Connect to create"}</Busy>
@@ -294,5 +307,61 @@ export function ChallengesSection() {
         {!sorted.length && <div className="card p-8 text-[13px] text-ink-2 sm:col-span-2 lg:col-span-3">{config ? "No Challenges yet. Create the first one." : "Loading Challenges…"}</div>}
       </div>
     </section>
+  );
+}
+
+/** Live preview of the Challenge card as it will appear once created. */
+function CreatePreview({ title, threshold, deadline, minLock, reserve, symbol, creator }: { title: string; threshold: string; deadline: string; minLock: string; reserve: string; symbol: string; creator: string | null }) {
+  let deadlineTs = 0;
+  try {
+    deadlineTs = datetimeToTs(deadline);
+  } catch {
+    /* unset */
+  }
+  const minLockSec = Math.round(parseFloat(minLock || "0") * 86400);
+  const tooSoon = deadlineTs > 0 && deadlineTs - nowTs() < minLockSec;
+  const thr = parseFloat(threshold || "0") || 0;
+  return (
+    <div className="mt-6 border-t border-line pt-5">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-ink-2 font-mono">Preview</div>
+      <div className="mt-3 max-w-[360px] card p-5 flex flex-col gap-4 bg-paper">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-mono text-ink-3">#next</div>
+            <h3 className="text-[17px] tracking-tight text-ink leading-tight">{title.trim() || "Untitled Challenge"}</h3>
+          </div>
+          <span className="tag tag-live">Active</span>
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between text-[12px] mb-2">
+            <span className="text-ink">
+              0 <span className="text-ink-3">/ {thr.toLocaleString("en-US")} {symbol}</span>
+            </span>
+            <span className="font-mono text-ink-2">0 lockers</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-paper-2" />
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Deadline</div>
+            <div className={tooSoon ? "text-bad" : "text-ink"}>{deadlineTs ? countdown(deadlineTs) : "—"}</div>
+            <div className="text-[11px] text-ink-3">{deadlineTs ? fmtDate(deadlineTs) : "pick a date"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Min lock</div>
+            <div className="text-ink">{fmtDur(minLockSec)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Boost reserve</div>
+            <div className="text-ink">{pct(Math.round(parseFloat(reserve || "0") * 100))}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Creator</div>
+            <div className="text-ink font-mono text-[11px] truncate">{creator ?? "you"}</div>
+          </div>
+        </div>
+      </div>
+      {tooSoon && <p className="mt-2 text-[12px] text-bad">The deadline is closer than the minimum lock duration, so nobody could join. Push it out past {fmtDur(minLockSec)}.</p>}
+    </div>
   );
 }

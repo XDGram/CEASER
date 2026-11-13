@@ -49,7 +49,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const selector = await setupWalletSelector({
-          network: CONFIG.network,
+          // An explicit network object so the selector's own JsonRpcProvider also
+          // uses the reliable endpoint instead of the rate-limited default.
+          network: { networkId: CONFIG.network, nodeUrl: CONFIG.nodeUrl, helperUrl: "https://helper.testnet.near.org", explorerUrl: CONFIG.explorerUrl, indexerUrl: "" },
           modules: [setupMyNearWallet({ walletUrl: CONFIG.walletUrl }), setupMeteorWallet()],
         });
         selectorRef.current = selector;

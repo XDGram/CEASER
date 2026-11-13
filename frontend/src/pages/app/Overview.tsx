@@ -4,6 +4,7 @@ import { CONFIG } from "../../config";
 import { countdown, fromUnits, mult, nowTs } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
+import { RewardEstimate } from "../../components/RewardEstimate";
 
 export function Overview() {
   const { accountId } = useWallet();
@@ -66,16 +67,21 @@ export function Overview() {
           </div>
           <div className="mt-4 divide-y divide-line">
             {mine.map((c) => (
-              <div key={c.id} className="py-3 flex items-center justify-between gap-3 text-[13px]">
-                <div>
-                  <div className="text-ink">
-                    #{c.id} · {c.title}
+              <div key={c.id} className="py-3 text-[13px]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Link to={`/app/challenges/${c.id}`} className="text-ink hover:underline underline-offset-4">
+                      #{c.id} · {c.title}
+                    </Link>
+                    <div className="text-[11.5px] text-ink-2">
+                      {fromUnits(c.total_locked, meta(c.token).decimals, 0)} / {fromUnits(c.threshold_amount, meta(c.token).decimals, 0)} {meta(c.token).symbol} · {countdown(c.deadline_ts)}
+                    </div>
                   </div>
-                  <div className="text-[11.5px] text-ink-2">
-                    {fromUnits(c.total_locked, meta(c.token).decimals, 0)} / {fromUnits(c.threshold_amount, meta(c.token).decimals, 0)} {meta(c.token).symbol} · {countdown(c.deadline_ts)}
-                  </div>
+                  <span className={`tag ${c.state === "succeeded" ? "tag-ok" : c.state === "failed" ? "tag-bad" : "tag-live"}`}>{c.state}</span>
                 </div>
-                <span className={`tag ${c.state === "succeeded" ? "tag-ok" : c.state === "failed" ? "tag-bad" : "tag-live"}`}>{c.state}</span>
+                <div className="mt-2">
+                  <RewardEstimate c={c} />
+                </div>
               </div>
             ))}
             {!mine.length && <p className="py-3 text-[13px] text-ink-2">You're not in any Challenge yet. Join one and your locked amount counts toward its goal.</p>}

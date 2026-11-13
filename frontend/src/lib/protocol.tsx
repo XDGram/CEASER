@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CONFIG } from "../config";
 import { tokenMeta, view } from "./near";
 import type { BoostTier, Challenge, Lock, TokenMeta, VaultConfig } from "./types";
@@ -42,6 +42,9 @@ export function boostFor(staked: bigint, tiers: BoostTier[]): number {
 export function ProtocolProvider({ children }: { children: ReactNode }) {
   const { accountId } = useWallet();
   const [reachable, setReachable] = useState<boolean | null>(null);
+  // Only flag unreachable after two consecutive full refresh failures, and keep
+  // showing the last good data meanwhile; a single flaky read is not an outage.
+  const failStreak = useRef(0);
   const [config, setConfig] = useState<VaultConfig | null>(null);
   const [pools, setPools] = useState<string[]>([]);
   const [tiers, setTiers] = useState<BoostTier[]>(FALLBACK_TIERS);
@@ -72,10 +75,12 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       if (t?.length) setTiers(t);
       setLockCount(count);
       setChallenges(list);
+      failStreak.current = 0;
       setReachable(true);
       await loadMetas([C.token, ...list.flatMap((c) => [c.token, c.sponsor_token])]);
     } catch {
-      setReachable(false);
+      failStreak.current += 1;
+      if (failStreak.current >= 2) setReachable(false);
     }
   }, [loadMetas]);
 
@@ -115,6 +120,33 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     [reachable, config, pools, tiers, challenges, lockCount, metas, meta, locks, balance, staked, boostBps, refresh, refreshUser],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+
+/**
+ * Estimated Challenge reward for one lock, per INTERFACE.md's reward formula.
+ * Finalized: base_pool share. Active: (sponsors + penalties) less the boost
+ * reserve, split by conviction. The boost multiplies the base and is capped by
+ * the reserve (reserve_remaining once finalized, the full reserve before).
+ */
+export function estimateReward(c: Challenge, conviction: bigint, boostBps: number): { base: bigint; boost: bigint; total: bigint } {
+  const totalConv = BigInt(c.total_conviction);
+  if (conviction <= 0n || totalConv === 0n) return { base: 0n, boost: 0n, total: 0n };
+  const finalized = c.state !== "active";
+  let basePool: bigint;
+  let reserve: bigint;
+  if (finalized) {
+    basePool = BigInt(c.base_pool);
+    reserve = BigInt(c.reserve_remaining);
+  } else {
+    const distributable = BigInt(c.sponsor_total) + BigInt(c.penalty_total);
+    reserve = (distributable * BigInt(c.boost_reserve_bps)) / 10000n;
+    basePool = distributable - reserve;
+  }
+  const base = (basePool * conviction) / totalConv;
+  let boost = (base * BigInt(boostBps - 10000)) / 10000n;
+  if (boost > reserve) boost = reserve;
+  return { base, boost, total: base + boost };
 }
 
 export function useProtocol(): ProtocolCtx {
