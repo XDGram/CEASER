@@ -15,6 +15,7 @@ VAULT="ceaser-vault-$SUFFIX.testnet"
 ORACLE="ceaser-oracle-$SUFFIX.testnet"
 TOKEN="ceaser-token-$SUFFIX.testnet"
 POOL="ceaser-pool-$SUFFIX.testnet"
+TREASURY="ceaser-treasury-$SUFFIX.testnet"   # vault owner; receives penalties with no Challenge sink
 
 # Short demo config: 60s TWAP window, 30s cooldown, everything else default.
 VAULT_CONFIG='{"max_penalty_bps":2000,"twap_window_sec":60,"cooldown_sec":30,"min_oracle_liquidity":"0","min_tranche_lock_sec":0,"max_lock_duration_sec":63072000}'
@@ -33,7 +34,7 @@ done
 say "  res/*.wasm ready"
 
 head1 "Creating testnet accounts (faucet)"
-for a in "$VAULT" "$ORACLE" "$TOKEN" "$POOL"; do
+for a in "$VAULT" "$ORACLE" "$TOKEN" "$POOL" "$TREASURY"; do
   create_account "$a"
   say "  created $a"
 done
@@ -44,19 +45,22 @@ deploy "$ORACLE" res/mock_oracle.wasm       "$(jq -nc --arg o "$ORACLE" '{owner_
 deploy "$TOKEN"  res/test_token.wasm \
   "$(jq -nc --arg o "$TOKEN" --arg s "$TOTAL_SUPPLY" '{owner_id:$o,total_supply:$s,name:"CEASER Test",symbol:"CSTEST",decimals:18}')"
 deploy "$VAULT"  res/ceaser_vault.wasm \
-  "$(jq -nc --arg o "$VAULT" --arg r "$ORACLE" --argjson c "$VAULT_CONFIG" '{owner_id:$o,oracle_id:$r,config:$c}')"
+  "$(jq -nc --arg o "$TREASURY" --arg r "$ORACLE" --argjson c "$VAULT_CONFIG" '{owner_id:$o,oracle_id:$r,config:$c}')"
 
 head1 "Wiring"
-tx "$VAULT" "$VAULT" add_staking_pool "$(jq -nc --arg p "$POOL" '{pool_id:$p}')" '30 Tgas' '0 NEAR'
-say "  vault whitelisted staking pool $POOL"
+tx "$TREASURY" "$VAULT" add_staking_pool "$(jq -nc --arg p "$POOL" '{pool_id:$p}')" '30 Tgas' '0 NEAR'
+say "  vault whitelisted staking pool $POOL (signed by owner $TREASURY)"
 tx "$VAULT" "$TOKEN" storage_deposit "$(jq -nc --arg a "$VAULT" '{account_id:$a}')" '30 Tgas' '0.01 NEAR'
 say "  vault storage-registered on $TOKEN"
+tx "$TREASURY" "$TOKEN" storage_deposit "$(jq -nc --arg a "$TREASURY" '{account_id:$a}')" '30 Tgas' '0.01 NEAR'
+say "  treasury storage-registered on $TOKEN"
 tx "$ORACLE" "$ORACLE" set_price "$(jq -nc --arg t "$TOKEN" --arg p "$PRICE_1" '{token:$t,price:$p}')" '30 Tgas' '0 NEAR'
 tx "$ORACLE" "$ORACLE" set_liquidity "$(jq -nc --arg t "$TOKEN" --arg l "$LIQUIDITY" '{token:$t,liquidity:$l}')" '30 Tgas' '0 NEAR'
 say "  oracle price \$1.00 ($PRICE_1), liquidity $LIQUIDITY"
 
 head1 "Verifying"
 assert_eq "vault.get_oracle" "$(view "$VAULT" get_oracle | jq -r .)" "$ORACLE"
+assert_eq "vault.get_owner (treasury)" "$(view "$VAULT" get_owner | jq -r .)" "$TREASURY"
 assert_eq "vault.get_staking_pools" "$(view "$VAULT" get_staking_pools | jq -c .)" "[\"$POOL\"]"
 assert_eq "vault config twap_window_sec" "$(view "$VAULT" get_config | jq -r .twap_window_sec)" "60"
 assert_eq "vault config cooldown_sec" "$(view "$VAULT" get_config | jq -r .cooldown_sec)" "30"
@@ -64,9 +68,12 @@ assert_eq "token symbol" "$(view "$TOKEN" ft_metadata | jq -r .symbol)" "CSTEST"
 assert_eq "oracle spot" "$(view "$ORACLE" spot "$(jq -nc --arg t "$TOKEN" '{token:$t}')" | jq -r .)" "$PRICE_1"
 assert_eq "vault registered on token" \
   "$(view "$TOKEN" storage_balance_of "$(jq -nc --arg a "$VAULT" '{account_id:$a}')" | jq -r 'if . == null then "no" else "yes" end')" "yes"
+assert_eq "treasury registered on token" \
+  "$(view "$TOKEN" storage_balance_of "$(jq -nc --arg a "$TREASURY" '{account_id:$a}')" | jq -r 'if . == null then "no" else "yes" end')" "yes"
 
 jq -n --arg v "$VAULT" --arg o "$ORACLE" --arg t "$TOKEN" --arg p "$POOL" \
   '{network:"testnet",vault:$v,oracle:$o,token:$t,staking_pool:$p}' > scripts/deployed.json
 head1 "Done"
 cat scripts/deployed.json
+say "  vault owner / treasury: $TREASURY"
 say "  keys are in ~/.near-credentials/testnet/. Next: ./demo.sh"
