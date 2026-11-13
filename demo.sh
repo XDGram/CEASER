@@ -88,9 +88,18 @@ tx "$POOL" "$POOL" set_account_staked_balance "$(j --arg a "$USER_B" --arg n "$(
 assert_eq "B staked NEAR (yocto)" \
   "$(view "$POOL" get_account_staked_balance "$(j --arg a "$USER_B" '{account_id:$a}')" | jq -r .)" "$(near_yocto 500)"
 
-# Reset the oracle to $1.00 so the run is reproducible.
+# Reset the oracle to $1.00 so the run is reproducible. A previous run leaves
+# the price at $1.60, and the TWAP only settles once a full window has passed,
+# so wait for it: lock A's reference price must be exactly $1.00.
 tx "$ORACLE" "$ORACLE" set_price "$(j --arg t "$TOKEN" --arg p "$PRICE_1" '{token:$t,price:$p}')" '30 Tgas' '0 NEAR'
-say "  oracle spot \$1.00, TWAP($TWAP_WINDOW s) = $(twap)"
+if [ "$(twap)" != "$PRICE_1" ]; then
+  say "  TWAP($TWAP_WINDOW s) is $(twap), waiting up to $((TWAP_WINDOW + 20))s for it to settle at \$1.00..."
+  for _ in $(seq 1 $(( (TWAP_WINDOW + 20) / 5 ))); do
+    sleep 5
+    [ "$(twap)" != "$PRICE_1" ] || break
+  done
+fi
+assert_eq "oracle TWAP($TWAP_WINDOW s) at \$1.00" "$(twap)" "$PRICE_1"
 
 DEADLINE=$(( $(now_ts) + DEADLINE_SEC ))
 tx "$VAULT" "$VAULT" create_challenge "$(j --arg t "$TOKEN" --arg th "$THRESHOLD" --argjson d "$DEADLINE" \
@@ -119,7 +128,7 @@ assert_eq "lock A amount" "$(lock "$LOCK_A" | jq -r .amount)" "$A_AMOUNT"
 assert_eq "lock A tranches" "$(lock "$LOCK_A" | jq -r '.tranches | length')" "3"
 assert_eq "lock A tranche fractions" "$(lock "$LOCK_A" | jq -c '[.tranches[].fraction_bps]')" "[5000,2500,2500]"
 assert_eq "lock A penalty sink" "$(lock "$LOCK_A" | jq -c .penalty_sink)" "{\"challenge\":$CID}"
-assert_eq "lock A reference_price" "$(lock "$LOCK_A" | jq -r .reference_price)" "$(twap)"
+assert_eq "lock A reference_price (\$1.00 TWAP at creation)" "$(lock "$LOCK_A" | jq -r .reference_price)" "$PRICE_1"
 assert_eq "lock A status" "$(lock "$LOCK_A" | jq -r .status)" "active"
 
 head1 "Step 2: B locks 50k CSTEST into C1 (500 NEAR staked -> 1.25x boost)"
