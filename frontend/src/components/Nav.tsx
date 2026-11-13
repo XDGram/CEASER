@@ -13,7 +13,7 @@ const links = [
 export function ButtonIcon({ dark = false }: { dark?: boolean }) {
   return (
     <span className={`inline-flex h-5 w-5 items-center justify-center rounded-[6px] ${dark ? "bg-ink text-paper" : "bg-white/20 text-white"}`}>
-      <Mark size={14} className="text-current" />
+      <Mark tile size={14} className="text-current" />
     </span>
   );
 }
@@ -51,7 +51,7 @@ export function Nav() {
     <header className="sticky top-0 z-40 bg-paper/85 backdrop-blur border-b border-line">
       <div className="mx-auto max-w-[1180px] px-4 sm:px-6 h-14 grid grid-cols-[1fr_auto_1fr] items-center">
         <Link to="/" className="flex items-center gap-2.5 justify-self-start">
-          <Mark size={22} />
+          <Mark tile size={22} />
           <span className="text-[13px] font-medium tracking-tight">CEASER</span>
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-[12.5px] text-ink-2 justify-self-center">

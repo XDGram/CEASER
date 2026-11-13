@@ -29,7 +29,7 @@ export function AppShell() {
         <div className="mx-auto max-w-[1180px] px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <Link to="/" className="flex items-center gap-2.5 shrink-0">
-              <Mark size={22} />
+              <Mark tile size={22} />
               <span className="text-[13px] font-medium tracking-tight hidden sm:inline">CEASER</span>
             </Link>
             <nav className="flex items-center gap-1 overflow-x-auto">

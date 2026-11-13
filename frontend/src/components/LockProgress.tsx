@@ -58,7 +58,7 @@ export function FlowProgress({ phase, title, sub, hash, onDismiss, dismissLabel 
               </motion.svg>
             ) : (
               <motion.div key="mark" animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }} className="text-ink">
-                <Mark size={44} />
+                <Mark tile size={44} />
               </motion.div>
             )}
           </AnimatePresence>

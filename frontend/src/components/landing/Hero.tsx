@@ -66,7 +66,7 @@ function Circuit() {
         <rect x={cx - 48} y={cy - 48} width="96" height="96" rx="20" fill="var(--color-surface)" stroke="var(--color-line)" />
         <foreignObject x={cx - 28} y={cy - 28} width="56" height="56">
           <div className="w-full h-full flex items-center justify-center text-ink">
-            <Mark size={48} />
+            <Mark tile size={48} />
           </div>
         </foreignObject>
       </motion.g>

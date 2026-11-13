@@ -8,7 +8,7 @@ export function Footer() {
       <div className="mx-auto max-w-[1180px] px-4 sm:px-6 py-10 grid md:grid-cols-[1fr_auto] gap-8">
         <div>
           <div className="flex items-center gap-2.5">
-            <Mark size={20} />
+            <Mark tile size={20} />
             <span className="text-[13px] font-medium">CEASER</span>
           </div>
           <p className="mt-3 max-w-[420px] text-[12.5px] leading-relaxed text-ink-2">
