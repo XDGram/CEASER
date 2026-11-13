@@ -5,12 +5,20 @@
 ```
 Memecoin dumps pay the diamond hands. Diamond hands who back NEAR get paid more.
 
-CEASER: lock your bag on NEAR testnet. Dump early and your penalty pays the holders who stayed.
+Built CEASER at NEAR HACKATHON: lock your bag, and anyone who dumps early pays a penalty to the holders who stayed.
 
 https://ceaser-nine.vercel.app
-https://github.com/XDGram/CEASER
-[@NEARProtocol tag] [#hackathon tag]
+@NEARProtocol #NEARHackathon
 ```
+
+Attach the 60-second screencast to the post: the rules require a video when judges can't run the demo themselves. Optional extra tags: @NearLegion @NearBuilders. Put the repo link in the form, not the post, to stay under 280 characters.
+
+## "What did you build?" (form field, 20 to 2,000 characters)
+
+```
+CEASER is a commitment protocol on NEAR that turns memecoin holding from a solo gamble into a coordinated game. Holders lock NEP-141 tokens behind strategies their future self cannot override: time locks, ROI ladders that unlock in tranches as an oracle TWAP crosses price targets, or the outcome of a community Challenge. A Challenge is a public goal (lock X tokens together before a deadline) with a sponsor reward pool. The signature mechanic: leaving a lock early costs a penalty, and that penalty is paid into the Challenge pool, so dumpers pay the diamond hands who stayed. Rewards are split by conviction (amount x time), and lockers with NEAR staked in a whitelisted pool get up to a 2x boost, turning memecoin activity into NEAR staking demand. Price unlocks are protected by a TWAP, a two-read commit with cooldown, a liquidity floor, minimum lock durations, an immutable reference price and a max-duration cap. Shipped on testnet: a Rust vault contract with 18 sandbox integration tests (7 core flows, 11 adversarial tests from an audit pass), a mock oracle, a test token and a mock staking pool; ./demo.sh runs the full arc against the live deployment with 49 assertions; and a web app with a landing page, lock flow, Challenge pages with conviction leaderboards, an early-exit dialog, and The Floor, a community feed of theses, confessions and on-chain receipts. The oracle is a mock with real TWAP semantics; a Ref Finance integration is on the roadmap.
+```
+
 
 Replace the two bracketed placeholders with the required hackathon tags before
 posting. The draft is under 280 characters with the placeholders in place, and
