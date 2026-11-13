@@ -1,0 +1,7 @@
+{
+  "network": "testnet",
+  "vault": "ceaser-vault-756e8a.testnet",
+  "oracle": "ceaser-oracle-756e8a.testnet",
+  "token": "ceaser-token-756e8a.testnet",
+  "staking_pool": "ceaser-pool-756e8a.testnet"
+}
