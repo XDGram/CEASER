@@ -6,6 +6,7 @@ import { short, mult } from "../../lib/near";
 import { Mark } from "../../components/Mark";
 import { Pfp } from "../../components/Pfp";
 import { profilePath } from "../../lib/profile";
+import { ActivityToasts } from "../../components/ActivityToasts";
 
 const tabs = [
   ["Overview", "/app", true],
@@ -83,6 +84,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="border-t border-line py-5 text-center text-[11px] font-mono text-ink-3">CEASER · mock oracle · not for real value</footer>
+      <ActivityToasts />
     </div>
   );
 }

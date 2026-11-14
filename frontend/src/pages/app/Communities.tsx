@@ -7,6 +7,7 @@ import { fetchAllLocks, fromUnits, view } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import type { Lock } from "../../lib/types";
 import { errorText, useWallet } from "../../lib/wallet";
+import { useLiveActivity, useRankMovement } from "../../lib/live";
 import { Busy, SectionHead } from "../../components/SectionHead";
 
 const SLUG = /^[a-z0-9-]{3,32}$/;
@@ -38,6 +39,14 @@ function convictionLabel(v: bigint, decimals: number): string {
   return `${fromUnits(v / 86400n, decimals, 0)}`;
 }
 
+/** The distance to the rank above, in whatever the table is sorted by. */
+function gapLabel(gap: bigint, key: SortKey, decimals: number, symbol: string): string {
+  if (key === "committed") return `${fromUnits(gap, decimals, 0)} ${symbol}`;
+  if (key === "participants") return `${gap} locker${gap === 1n ? "" : "s"}`;
+  if (key === "conviction") return `${convictionLabel(gap, decimals)} token-days`;
+  return `${(Number(gap) / 10).toFixed(1)} points`;
+}
+
 export function Communities() {
   const { challenges, meta } = useProtocol();
   const { accountId, connect, toast } = useWallet();
@@ -47,6 +56,17 @@ export function Communities() {
   const [locks, setLocks] = useState<Lock[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [sort, setSort] = useState<SortKey>("committed");
+  const moves = useRankMovement();
+  // A rank change detected while the page is open highlights that row briefly.
+  const { events } = useLiveActivity();
+  const [flash, setFlash] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const ids = events.filter((e) => e.kind === "rank_change" && e.communityId).map((e) => e.communityId as string);
+    if (!ids.length) return;
+    setFlash((f) => new Set([...f, ...ids]));
+    const t = window.setTimeout(() => setFlash(new Set()), 6000);
+    return () => window.clearTimeout(t);
+  }, [events]);
 
   const load = useCallback(async () => {
     try {
@@ -195,12 +215,38 @@ export function Communities() {
             {ranked.map(({ c, s }, i) => {
               const v = metric(s, sort);
               const w = leader > 0n ? Math.max(2, Number((v * 1000n) / leader) / 10) : 0;
+              const move = moves.get(c.id) ?? 0;
+              const ahead = i > 0 ? ranked[i - 1] : null;
+              const gap = ahead ? metric(ahead.s, sort) - v : 0n;
               return (
-                <li key={c.id} className="py-3 grid grid-cols-[24px_minmax(0,1fr)_auto] sm:grid-cols-[24px_minmax(0,220px)_minmax(0,1fr)_auto] items-center gap-3 text-[13px]" data-rank-id={c.id}>
+                <li
+                  key={c.id}
+                  className={`py-3 grid grid-cols-[24px_minmax(0,1fr)_auto] sm:grid-cols-[24px_minmax(0,220px)_minmax(0,1fr)_auto] items-center gap-3 text-[13px] transition-colors ${flash.has(c.id) ? "bg-accent/5" : ""}`}
+                  data-rank-id={c.id}
+                  data-flash={flash.has(c.id) ? "1" : undefined}
+                >
                   <span className="pixel text-[13px] text-ink-3">{i + 1}</span>
-                  <Link to={`/app/c/${c.id}`} className="text-ink truncate hover:underline underline-offset-4">
-                    {c.name}
-                  </Link>
+                  <div className="min-w-0">
+                    <Link to={`/app/c/${c.id}`} className="block text-ink truncate hover:underline underline-offset-4">
+                      {c.name}
+                    </Link>
+                    {(move !== 0 || (ahead && gap > 0n)) && (
+                      <div className="mt-0.5 text-[10.5px] leading-snug text-ink-3" data-rank-note>
+                        {move !== 0 && (
+                          <span className={move > 0 ? "text-ok" : ""}>
+                            {move > 0 ? "up" : "down"} <span className="pixel text-[11px]">{Math.abs(move)}</span> since your last visit
+                          </span>
+                        )}
+                        {move !== 0 && ahead && gap > 0n && <span> · </span>}
+                        {ahead && gap > 0n && (
+                          <span>
+                            <span className="pixel text-[11px]">{gapLabel(gap, sort, tm.decimals, tm.symbol).split(" ")[0]}</span>{" "}
+                            {gapLabel(gap, sort, tm.decimals, tm.symbol).split(" ").slice(1).join(" ")} behind {ahead.c.name}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="hidden sm:block h-1.5 rounded-full bg-paper-2 overflow-hidden">
                     <motion.div key={sort} initial={{ width: 0 }} animate={{ width: `${w}%` }} transition={{ duration: 0.5, ease: "easeOut" }} className={`h-full rounded-full ${i === 0 ? "bg-accent" : "bg-ink"}`} />
                   </div>

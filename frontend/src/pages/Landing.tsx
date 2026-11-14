@@ -14,6 +14,7 @@ import { Defenses } from "../components/landing/Defenses";
 import { LiveChallenges } from "../components/landing/LiveChallenges";
 import { Closing } from "../components/landing/Closing";
 import { Footer } from "../components/Footer";
+import { ActivityToasts } from "../components/ActivityToasts";
 
 export function Landing() {
   const { accountId } = useWallet();
@@ -40,6 +41,7 @@ export function Landing() {
         <Closing />
       </main>
       <Footer />
+      <ActivityToasts />
     </>
   );
 }
