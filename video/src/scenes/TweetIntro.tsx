@@ -3,6 +3,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "rem
 import { kf, prog, sp } from "../anim";
 import { FPS, TL, wd } from "../time";
 import { inter } from "../fonts";
+import { CH, SoldChart } from "./SoldChart";
 
 type Card = { src: string; w: number; h: number; at: number; x: number; y: number; r: number; width: number };
 const IMG: Record<string, [number, number]> = {
@@ -68,7 +69,7 @@ export function TweetIntro() {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const cam = kf(frame, [[0, 1], [7, 1.12]]);
-  const out1 = prog(frame, EVERY - 0.25, EVERY + 0.3);
+  const out1 = prog(frame, CH - 0.35, CH + 0.2);
   const out2 = prog(frame, ALMOST, ALMOST + 0.9);
   const grey2 = prog(frame, ALMOST - 0.1, ALMOST + 0.5);
   // Riser into the reveal: an orange line of light grows, then whites out.
@@ -84,8 +85,9 @@ export function TweetIntro() {
   return (
     <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 45%, #1a1a1a 0%, #070707 70%)", overflow: "hidden" }}>
       <AbsoluteFill style={{ transform: `translate(${sx}px,${sy}px) scale(${cam})` }}>
-        {t < EVERY + 0.5 && WAVE1.map((c, i) => <TweetCard key={c.src} c={c} frame={frame} depth={WAVE1.filter((d, j) => j > i && t >= d.at).length} out={out1} />)}
+        {t < CH + 0.4 && WAVE1.map((c, i) => <TweetCard key={c.src} c={c} frame={frame} depth={WAVE1.filter((d, j) => j > i && t >= d.at).length} out={out1} />)}
       </AbsoluteFill>
+      <SoldChart />
       <Big text="Every cycle." at={EVERY} until={SAME - 0.1} frame={frame} />
       <Big text="Same story." at={SAME} until={TL.vo[1].start - 0.35} frame={frame} />
       <Big text="Everyone says…" at={TL.vo[1].start} until={HOLD - 0.75} frame={frame} size={96} color="#bdbdbd" />

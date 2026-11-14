@@ -5,7 +5,7 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = lambda *x: os.path.join(root, 'public', *x)
 dur = lambda f: float(subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',f],capture_output=True,text=True).stdout)
 
-INTRO = 7.0          # tweet montage, music only
+INTRO = 11.0         # tweet montage + "You sold at 2x / It went 50x" beat, music only
 REVEAL_GAP = 2.2     # silence + riser between line 2 and "This is CEASER"
 GAP = 1.1            # breath between lines
 vo, t = [], INTRO
@@ -20,6 +20,8 @@ end = vo[9]['start'] + vo[9]['dur'] + 3.5
 sfx = [  # file, time the hit should land, offset of the hit inside the file, gain dB
     ('whoosh-fast.mp3', 1.2, 0.4, -16), ('whoosh-fast.mp3', 2.9, 0.4, -18), ('whoosh-fast.mp3', 4.4, 0.4, -18),
     ('whoosh-fast.mp3', 5.7, 0.4, -18),
+    ('whoosh-deep-impact.mp3', INTRO - 3.45, 0.5, -15),  # SOLD at 2x
+    ('whoosh-tunnel.mp3', INTRO - 2.6, 1.0, -16),       # it went 50x
     ('riser.mp3', reveal, 2.5, -10), ('big-impact.mp3', reveal, 2.1, -6), ('whoosh-deep-impact.mp3', reveal, 0.5, -10),
     ('whoosh-tunnel.mp3', vo[4]['start'] - 0.4, 1.0, -27),   # "Now the twist"
     ('whoosh-tunnel.mp3', vo[6]['start'] - 0.4, 1.0, -27),   # "NEAR is at the core"
