@@ -19,25 +19,24 @@ The video must feel cinematic, fast and emotional, not like a screen recording.
 
 ## Tooling status (checked 14 Nov 2026)
 - uiverse.io: blocked from this environment (403 through the proxy). Elements must be pasted in by hand if wanted.
-- Remotion: not installed; can be added with npm (Node 22 available). ffmpeg is installed.
+- Remotion 4 installed in `video/` (separate from the app). ffmpeg is installed.
 - X: tweet pages load and the official embed (publish.twitter.com oEmbed + widgets.js) renders
   real tweets, which is how the screenshots below were made.
 
-## Intro tweet screenshots (docs/video/tweets/, 2160x2160, black background, X dark embed)
-| File | Account | Gist | Source |
-|---|---|---|---|
-| tweet-01 | Chris Ani @iamchrisani | sold $fries at 100%, it went to $500k mcap in 3 hours | https://x.com/iamchrisani/status/1741227116400713911 |
-| tweet-02 | Coinfessions @coinfessions | fumbled 98k in the memecoin cycle, $9 left | https://x.com/coinfessions/status/2076381084091314343 |
-| tweet-03 | Traders Confessions @TradersConf | sold $5k safemoon that later ran to $800k | https://x.com/TradersConf/status/2081592728866128346 |
-| tweet-04 | Q @Quanterty | sold $MEME moments before the pump, fomoed back at the top | https://x.com/Quanterty/status/2097507910158885272 |
-| tweet-05 | pattch @pattchxbt | "80,000 simulations… you sold early every time" | https://x.com/pattchxbt/status/1853861071662280745 |
-| tweet-06 | Lookonchain | "Did you sell $TRUMP too early?" missed $269M | https://x.com/lookonchain/status/1881017475040776359 |
-| tweet-07 | Lookonchain | $Pnut sold at a loss, now worth $1.6M | https://x.com/lookonchain/status/1852798553409954284 |
-| tweet-08 | Lookonchain | sold $CASHCAT for $711, missed $2.7M | https://x.com/lookonchain/status/2075425866348470369 |
-| tweet-09 | Lookonchain | sold $ASTEROID a day before the pump, now $2.6M | https://x.com/lookonchain/status/2045837716991201344 |
-| tweet-10 | Bubblemaps | "$PEPE: The Biggest Regret", $70m | https://x.com/bubblemaps/status/1655256269660225536 |
-| tweet-11 | Lookonchain | sold $aura right as the 128x rally began | https://x.com/lookonchain/status/1933099472508387554 |
-| tweet-12 | Vindicated Chidi | "The Pain of Selling Early" | https://x.com/Vindicatedchidi/status/1955145039601942799 |
+## Intro tweet cards
+Style (from the user's references): SHORT one-line regret tweets ("I should have held longer",
+"roundtripped", "sold too early"), from verified, mid-size crypto accounts, not huge ones.
+Card: black background, avatar, name, blue check, handle, "X.com" top right, text only, no stats,
+all the same size (1400 wide, min 420 tall). Target about 15.
+
+Renderer: `video/tools/tweet-cards.cjs` pulls text, name, avatar and verified status from X's
+public syndication endpoint and renders the card. Run it with the tweet links:
+`node video/tools/tweet-cards.cjs <outDir> <link> <link> ...` (from a folder with playwright).
+
+Links: waiting on the user (X search needs login from here). Found so far:
+- https://x.com/nyhrox/status/1927408491955695990 "i just roundtripped 25k because of this tweet"
+- https://x.com/oscayszn/status/1997047571576246363 "roundtripped so much...." (long tail, trim not allowed; probably skip)
+- user references: @mztacat, @ToolySOL "I should have held longer", a reply "In the end holding on was always better than selling for a lose"
 
 Note: these are public posts by real people. Using them as quoted, unaltered screenshots in a
 hackathon demo is normal practice; do not edit their text, and credit "Posts from X" on screen.
