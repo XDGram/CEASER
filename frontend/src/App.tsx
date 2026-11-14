@@ -12,6 +12,7 @@ import { Community } from "./pages/app/Community";
 import { ClaimSection } from "./components/ClaimSection";
 import { Profile } from "./pages/app/Profile";
 import { Communities } from "./pages/app/Communities";
+import { CommunityPage } from "./pages/app/CommunityPage";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="community" element={<Community />} />
               <Route path="communities" element={<Communities />} />
               <Route path="u/:account" element={<Profile />} />
+              <Route path="c/:id" element={<CommunityPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
