@@ -49,7 +49,9 @@ export function AppShell() {
               <>
                 <Link to={profilePath(accountId)} className="btn btn-outline btn-sm font-mono !pl-1.5 flex items-center gap-2" title="Your profile">
                   <Pfp id={accountId} size={20} />
-                  {short(accountId, 20)}
+                  {/* Shorter on phones so the chip and Sign out fit beside the nav without overflowing. */}
+                  <span className="sm:hidden">{short(accountId, 12)}</span>
+                  <span className="hidden sm:inline">{short(accountId, 20)}</span>
                 </Link>
                 <button className="btn btn-ghost btn-sm !px-2" onClick={disconnect} title="Disconnect">
                   Sign out
