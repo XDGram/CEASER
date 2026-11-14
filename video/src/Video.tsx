@@ -5,13 +5,23 @@ import { Sfx } from "./parts";
 import { TweetIntro } from "./scenes/TweetIntro";
 import { Reveal, revealSfx } from "./scenes/Reveal";
 import { LockScene, lockSfx } from "./scenes/LockScene";
+import { Twist, twistSfx } from "./scenes/Twist";
+import { Communities, commSfx } from "./scenes/Communities";
+import { NearCore, nearSfx } from "./scenes/NearCore";
+import { Rank, rankSfx } from "./scenes/Rank";
+import { Outro, outroSfx } from "./scenes/Outro";
 
 const SCENES: [number, number, React.FC][] = [
   [0, TL.reveal + 0.05, TweetIntro],
   [TL.reveal, lineStart(4) + 0.05, Reveal],
-  [lineStart(4) - 0.4, lineStart(5) + 0.05, LockScene],
+  [lineStart(4) - 0.15, lineStart(5) + 0.05, LockScene],
+  [lineStart(5), lineStart(6) + 0.05, Twist],
+  [lineStart(6) - 0.05, lineStart(7) + 0.05, Communities],
+  [lineStart(7), lineStart(9) + 0.05, NearCore],
+  [lineStart(9), lineStart(10) + 0.05, Rank],
+  [lineStart(10), 1e9, Outro],
 ];
-const SFX: { name: string; at: number; dur?: number }[] = [...revealSfx, ...lockSfx];
+const SFX: { name: string; at: number; dur?: number }[] = [...revealSfx, ...lockSfx, ...twistSfx, ...commSfx, ...nearSfx, ...rankSfx, ...outroSfx];
 
 export function CeaserVideo() {
   const t = useCurrentFrame() / FPS;
