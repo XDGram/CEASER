@@ -57,9 +57,11 @@ validators, not only the demo pool. Verified on testnet against the validator po
 | Two 100k locks join the same Challenge, one with that stake, one without | both accepted | |
 | Both claim after the deadline | staker: reward 4,633 at `boost_bps` 11000; no stake: 3,788 at 10000 | `J9mvffWkYWWCdCyhGLEX9uv5gXQLEkPyFakCWz147UzE`, `sptR3fVrCSfRPSGjHRuWQ5DVkjd4B5NZFH7qMvSUQ5C` |
 
-The live vault whitelists the same validator pool, and the app makes it the default
-boost pool for new locks. Stake from any NEAR wallet's staking page; the vault reads
-it at claim time. The demo pool below stays only for the seeded demo locks.
+The live vault switches to the same validator pool with one owner call
+(`add_staking_pool`), no redeploy. The app already makes the validator pool the default
+boost pool for new locks as soon as the vault whitelists it. Stake from any NEAR
+wallet's staking page; the vault reads it at claim time. Until then the live vault
+reads the demo pool below, which the seeded demo locks use.
 
 Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json)):
 
@@ -68,8 +70,8 @@ Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json))
 | Vault | `ceaser-vault-756e8a.testnet` |
 | Test token (CSTEST, 18 decimals) | `ceaser-token-756e8a.testnet` |
 | Mock oracle | `ceaser-oracle-756e8a.testnet` |
-| Boost staking pool (real NEAR validator) | `legends.pool.f863973.m0` |
-| Demo staking pool (seeded locks only) | `ceaser-pool-756e8a.testnet` |
+| Boost staking pool (demo, owner-set balances) | `ceaser-pool-756e8a.testnet` |
+| Real NEAR validator pool (verified above, ready to whitelist) | `legends.pool.f863973.m0` |
 | Treasury (vault owner) | `ceaser-treasury-756e8a.testnet` |
 
 The vault owner is a separate treasury account, not the vault itself. It
