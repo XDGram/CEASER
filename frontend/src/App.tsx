@@ -11,6 +11,7 @@ import { ChallengeDetail } from "./pages/app/ChallengeDetail";
 import { Community } from "./pages/app/Community";
 import { ClaimSection } from "./components/ClaimSection";
 import { Profile } from "./pages/app/Profile";
+import { CommunityPage } from "./pages/app/CommunityPage";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="locks" element={<ClaimSection />} />
               <Route path="community" element={<Community />} />
               <Route path="u/:account" element={<Profile />} />
+              <Route path="c/:id" element={<CommunityPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
