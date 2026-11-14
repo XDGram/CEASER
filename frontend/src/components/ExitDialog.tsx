@@ -93,34 +93,52 @@ function HoldButton({ label, onConfirm, disabled }: { label: string; onConfirm: 
   );
 }
 
-function Breakdown({ p, symbol, decimals }: { p: ExitPreview; symbol: string; decimals: number }) {
+/** "1.5x", "25x": a price multiple as people say it. */
+function multipleLabel(bps: number): string {
+  const m = bps / 10000;
+  return `${Number.isInteger(m) ? m : Number(m.toFixed(2))}x`;
+}
+
+/** "a", "a and b", "a, b and c". */
+function joinAnd(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** Unclaimed rungs of an ROI ladder; empty for time and collective locks. */
+export function cancelledRungs(lock: Lock): string[] {
+  if (!("roi_ladder" in lock.strategy)) return [];
+  return lock.tranches.flatMap((t) => {
+    if (t.claimed) return [];
+    const c = t.conditions.find((x) => "price_above" in x);
+    return c && "price_above" in c ? [multipleLabel(c.price_above.multiplier_bps)] : [];
+  });
+}
+
+function Breakdown({ p, lock, symbol, decimals }: { p: ExitPreview; lock: Lock; symbol: string; decimals: number }) {
   const total = p.remaining > 0n ? p.remaining : 1n;
   const retPct = Number((p.returned * 10000n) / total) / 100;
-  const sinkLine =
+  const destination =
     p.penalty === 0n
       ? "Everything left in this lock is already free, so no penalty is charged."
       : p.sink.kind === "challenge"
-      ? `Your penalty is paid to the ${p.sink.stayers} locker${p.sink.stayers === 1 ? "" : "s"} who stay.`
-      : p.sink.treasury
-        ? "The sink Challenge is no longer open, so the vault pays the penalty to its treasury."
-        : "The penalty is sent to the account set on this lock.";
+        ? `Paid to the ${p.sink.stayers} locker${p.sink.stayers === 1 ? "" : "s"} who stay in Challenge #${p.sink.challenge.id}: ${p.sink.challenge.title}`
+        : p.sink.treasury
+          ? `Sent to the treasury account ${p.sink.account}`
+          : `Sent to ${p.sink.account}`;
+  const rungs = cancelledRungs(lock);
   return (
     <div className="rounded-xl border border-line bg-paper p-4 sm:p-5">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-[10.5px] uppercase tracking-[0.12em] text-ink-2 font-mono">Back to you now</div>
-          <div className="pixel text-[26px] mt-1.5 text-ink">{fromUnits(p.returned, decimals, 0)}</div>
-          <div className="text-[11.5px] text-ink-2 mt-0.5">
-            {symbol}
-            {p.free > 0n ? ` · ${fromUnits(p.free, decimals, 0)} already free, no penalty` : ""}
-          </div>
-        </div>
-        <div>
-          <div className="text-[10.5px] uppercase tracking-[0.12em] text-ink-2 font-mono">Penalty</div>
-          <div className="pixel text-[26px] mt-1.5 text-bad">{fromUnits(p.penalty, decimals, 0)}</div>
-          <div className="text-[11.5px] text-ink-2 mt-0.5">{symbol}</div>
-        </div>
-      </div>
+      <p className="text-[19px] sm:text-[21px] leading-snug tracking-tight text-ink">
+        You get back <span className="pixel text-[1.15em]">{fromUnits(p.returned, decimals, 0)}</span> {symbol}.{" "}
+        <span className="text-bad">
+          You lose <span className="pixel text-[1.15em]">{fromUnits(p.penalty, decimals, 0)}</span> {symbol} ({pct(lock.penalty_bps)}).
+        </span>
+      </p>
+      {p.free > 0n && (
+        <p className="mt-1 text-[12px] text-ink-2">
+          {fromUnits(p.free, decimals, 0)} {symbol} of that is already unlocked and carries no penalty.
+        </p>
+      )}
 
       <div className="mt-4 flex h-2 w-full overflow-hidden rounded-full bg-paper-2" role="img" aria-label={`${retPct.toFixed(1)} percent returned, ${(100 - retPct).toFixed(1)} percent penalty`}>
         <motion.div initial={{ width: 0 }} animate={{ width: `${retPct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} className="h-full bg-ink" />
@@ -131,19 +149,15 @@ function Breakdown({ p, symbol, decimals }: { p: ExitPreview; symbol: string; de
         <span>penalty</span>
       </div>
 
-      <div className="mt-4 border-t border-line pt-3 text-[12.5px] leading-relaxed">
+      <div className="mt-4 border-t border-line pt-3">
         <div className="text-[10.5px] uppercase tracking-[0.12em] text-ink-2 font-mono">Where the penalty goes</div>
-        <div className="mt-1 text-ink">
-          {p.sink.kind === "challenge" ? (
-            <>
-              Challenge #{p.sink.challenge.id} · {p.sink.challenge.title}
-            </>
-          ) : (
-            <span className="font-mono text-[12px]">{short(p.sink.account, 40)}</span>
-          )}
-        </div>
-        <div className="text-ink-2">{sinkLine}</div>
+        <p className="mt-1 text-[14px] leading-snug text-ink font-medium break-words">{destination}</p>
+        {p.penalty > 0n && p.sink.kind === "account" && p.sink.treasury && <p className="mt-0.5 text-[12px] text-ink-2">The sink Challenge on this lock is no longer open, so the vault sends the penalty to its treasury.</p>}
       </div>
+
+      {rungs.length > 0 && (
+        <p className="mt-3 border-t border-line pt-3 text-[13px] text-ink">This cancels your remaining unlocks at {joinAnd(rungs)}.</p>
+      )}
     </div>
   );
 }
@@ -281,7 +295,7 @@ export function ExitDialog({ lock, initialStage, resume, onClose }: { lock: Lock
           </p>
           <div className="mt-5">
             {preview ? (
-              <Breakdown p={preview} symbol={tm.symbol} decimals={tm.decimals} />
+              <Breakdown p={preview} lock={lock} symbol={tm.symbol} decimals={tm.decimals} />
             ) : previewError ? (
               <div className="rounded-xl border border-bad/30 bg-bad/5 p-4 text-[13px] text-bad">Could not read this lock's exit terms: {previewError}</div>
             ) : (
