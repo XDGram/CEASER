@@ -30,7 +30,7 @@ function Tabs() {
 }
 
 export function AppShell() {
-  const { ready, accountId, connect, disconnect } = useWallet();
+  const { ready, accountId, isDemo, connect, disconnect } = useWallet();
   const { boostBps, reachable } = useProtocol();
   const navigate = useNavigate();
   // Profiles are public: anyone can read /app/u/:account without a wallet.
@@ -57,6 +57,11 @@ export function AppShell() {
             <span className="pill hidden md:inline-flex">boost {mult(boostBps)}</span>
             {accountId ? (
               <>
+                {isDemo && (
+                  <span className="pill hidden sm:inline-flex" title="A testnet account created in this browser. Its key lives only here.">
+                    demo account
+                  </span>
+                )}
                 <Link to={profilePath(accountId)} className="btn btn-outline btn-sm font-mono !pl-1.5 flex items-center gap-2" title="Your profile">
                   <Pfp id={accountId} size={20} />
                   {/* Shorter on phones so the chip and Sign out fit beside the nav without overflowing. */}

@@ -1,6 +1,6 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
-import { EnterButton } from "../Nav";
+import { DemoButton, EnterButton } from "../Nav";
 import { Mark } from "../Mark";
 
 /* The mechanic as a sentence, left to right, around the vault tile. 1000 x 240 canvas. */
@@ -97,8 +97,9 @@ export function Hero() {
         <motion.p {...fade(1.4)} className="mx-auto mt-7 max-w-[440px] text-[14.5px] leading-relaxed text-ink-2">
           A memecoin lock on NEAR where the people who sell early pay the people who hold.
         </motion.p>
-        <motion.div {...fade(1.6)} className="mt-9 flex justify-center">
+        <motion.div {...fade(1.6)} className="mt-9 flex flex-wrap justify-center gap-3">
           <EnterButton className="btn btn-accent" icon />
+          <DemoButton />
         </motion.div>
       </motion.div>
     </section>

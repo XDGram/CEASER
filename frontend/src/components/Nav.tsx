@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useWallet } from "../lib/wallet";
 import { markEnter } from "../lib/enter";
 import { Mark } from "./Mark";
@@ -42,6 +43,41 @@ export function EnterButton({ className = "btn btn-primary btn-sm", label, icon 
       }}
     >
       {inner}
+    </button>
+  );
+}
+
+/** One click: a fresh testnet account made in this browser, no wallet needed. */
+export function DemoButton({ className = "btn btn-outline" }: { className?: string }) {
+  const { accountId, startDemo, toast } = useWallet();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<string | null>(null);
+  if (accountId) return null;
+  return (
+    <button
+      className={className}
+      disabled={step !== null}
+      title="Creates a fresh NEAR testnet account in this browser with test tokens. No wallet or sign-up needed."
+      onClick={async () => {
+        setStep("Starting");
+        try {
+          await startDemo(setStep);
+          toast("Demo account ready with 250,000 test CSTEST", "ok");
+          navigate("/app");
+        } catch (e) {
+          toast((e as Error).message, "err");
+        } finally {
+          setStep(null);
+        }
+      }}
+    >
+      {step ? (
+        <>
+          <span className="spinner" /> {step}
+        </>
+      ) : (
+        "Try without a wallet"
+      )}
     </button>
   );
 }

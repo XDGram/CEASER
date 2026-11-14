@@ -7,6 +7,7 @@ import "@near-wallet-selector/modal-ui/styles.css";
 import { actionCreators } from "@near-js/transactions";
 import { CONFIG } from "../config";
 import { txHash } from "./near";
+import { createDemoAccount, demoAccount, forgetDemo, loadDemo, type DemoAccount } from "./demoAccount";
 
 export type ToastKind = "ok" | "err" | "info";
 export interface Toast {
@@ -26,6 +27,10 @@ interface WalletCtx {
   /** Result MyNearWallet put in the URL when it redirected back, if any. */
   returnedTx: ReturnedTx | null;
   accountId: string | null;
+  /** True when signed in with a one-click demo account kept in this browser. */
+  isDemo: boolean;
+  /** Creates a demo account; resolves to its id. */
+  startDemo: (onStep?: (s: string) => void) => Promise<string>;
   connect: () => void;
   disconnect: () => Promise<void>;
   call: (receiverId: string, methodName: string, args: Record<string, unknown>, gas: string, deposit?: string) => Promise<unknown>;
@@ -40,7 +45,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const selectorRef = useRef<WalletSelector | null>(null);
   const modalRef = useRef<WalletSelectorModal | null>(null);
   const [ready, setReady] = useState(false);
-  const [accountId, setAccountId] = useState<string | null>(null);
+  const [walletAccount, setWalletAccount] = useState<string | null>(null);
+  const [demo, setDemo] = useState<DemoAccount | null>(() => loadDemo());
+  const accountId = demo?.accountId ?? walletAccount;
   const [returnedTx, setReturnedTx] = useState<ReturnedTx | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
@@ -66,7 +73,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         modalRef.current = setupModal(selector, { contractId: CONFIG.contracts.vault });
         const apply = () => {
           const acc = selector.store.getState().accounts.find((a) => a.active) ?? selector.store.getState().accounts[0];
-          setAccountId(acc?.accountId ?? null);
+          setWalletAccount(acc?.accountId ?? null);
         };
         apply();
         sub = selector.store.observable.subscribe(apply);
@@ -98,13 +105,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const connect = useCallback(() => modalRef.current?.show(), []);
+  const startDemo = useCallback(async (onStep?: (s: string) => void) => {
+    const d = await createDemoAccount(onStep);
+    setDemo(d);
+    return d.accountId;
+  }, []);
   const disconnect = useCallback(async () => {
+    if (demo) {
+      if (!window.confirm("Sign out of the demo account? Its key lives only in this browser, so you will not be able to get back into it.")) return;
+      forgetDemo();
+      setDemo(null);
+      return;
+    }
     const w = await selectorRef.current?.wallet();
     await w?.signOut();
-  }, []);
+  }, [demo]);
 
   const call = useCallback(
     async (receiverId: string, methodName: string, args: Record<string, unknown>, gas: string, deposit = "0") => {
+      if (demo) {
+        const outcome = await demoAccount(demo).functionCall({
+          contractId: receiverId,
+          methodName,
+          args,
+          gas: BigInt(gas),
+          attachedDeposit: BigInt(deposit),
+        });
+        const hash = txHash(outcome);
+        if (hash) toast(`${methodName} sent`, "ok", hash);
+        return outcome;
+      }
       if (!accountId || !selectorRef.current) {
         modalRef.current?.show();
         throw new Error("Connect a wallet first");
@@ -119,12 +149,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (hash) toast(`${methodName} sent`, "ok", hash);
       return outcome;
     },
-    [accountId, toast],
+    [accountId, demo, toast],
   );
 
   const value = useMemo(
-    () => ({ ready, returnedTx, accountId, connect, disconnect, call, toasts, toast, dismiss }),
-    [ready, returnedTx, accountId, connect, disconnect, call, toasts, toast, dismiss],
+    () => ({ ready, returnedTx, accountId, isDemo: demo !== null, startDemo, connect, disconnect, call, toasts, toast, dismiss }),
+    [ready, returnedTx, accountId, demo, startDemo, connect, disconnect, call, toasts, toast, dismiss],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
