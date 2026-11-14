@@ -25,6 +25,8 @@ interface ProtocolCtx {
   locks: Lock[];
   balance: bigint | null;
   staked: bigint | null;
+  /** Pool new locks use for the boost (the real validator pool once whitelisted). */
+  boostPool: string;
   boostBps: number;
   refresh: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -32,6 +34,11 @@ interface ProtocolCtx {
 
 const Ctx = createContext<ProtocolCtx | null>(null);
 const DEFAULT_META: TokenMeta = { symbol: "TOKEN", decimals: 18, name: "Token" };
+
+/** The pool new locks should use for the NEAR boost: the real validator pool when whitelisted. */
+export function boostPoolOf(pools: string[]): string {
+  return pools.includes(CONFIG.contracts.validator_pool) ? CONFIG.contracts.validator_pool : CONFIG.contracts.staking_pool;
+}
 
 export function boostFor(staked: bigint, tiers: BoostTier[]): number {
   let bps = 10000;
@@ -53,7 +60,9 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
   const [metas, setMetas] = useState<Record<string, TokenMeta>>({});
   const [locks, setLocks] = useState<Lock[]>([]);
   const [balance, setBalance] = useState<bigint | null>(null);
-  const [staked, setStaked] = useState<bigint | null>(null);
+  // Staked NEAR in the real validator pool and in the legacy demo pool.
+  const [stakedReal, setStakedReal] = useState<bigint | null>(null);
+  const [stakedMock, setStakedMock] = useState<bigint | null>(null);
 
   const loadMetas = useCallback(async (tokens: string[]) => {
     const unique = [...new Set(tokens)];
@@ -88,17 +97,20 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
     if (!accountId) {
       setLocks([]);
       setBalance(null);
-      setStaked(null);
+      setStakedReal(null);
+      setStakedMock(null);
       return;
     }
-    const [l, b, s] = await Promise.all([
+    const [l, b, s, r] = await Promise.all([
       view<Lock[]>(C.vault, "get_locks_by_owner", { account_id: accountId, from_index: 0, limit: 50 }).catch(() => []),
       view<string>(C.token, "ft_balance_of", { account_id: accountId }).catch(() => "0"),
       view<string>(C.staking_pool, "get_account_staked_balance", { account_id: accountId }).catch(() => "0"),
+      view<string>(C.validator_pool, "get_account_staked_balance", { account_id: accountId }).catch(() => "0"),
     ]);
     setLocks(l);
     setBalance(BigInt(b));
-    setStaked(BigInt(s));
+    setStakedMock(BigInt(s));
+    setStakedReal(BigInt(r));
     await loadMetas(l.map((x) => x.token));
   }, [accountId, loadMetas]);
 
@@ -113,11 +125,14 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const meta = useCallback((token: string) => metas[token] ?? DEFAULT_META, [metas]);
+  // New locks use the real validator pool once the vault whitelists it; until then the demo pool.
+  const boostPool = boostPoolOf(pools);
+  const staked = boostPool === C.validator_pool ? stakedReal : stakedMock;
   const boostBps = boostFor(staked ?? 0n, tiers);
 
   const value = useMemo<ProtocolCtx>(
-    () => ({ reachable, config, pools, tiers, challenges, lockCount, metas, meta, locks, balance, staked, boostBps, refresh, refreshUser }),
-    [reachable, config, pools, tiers, challenges, lockCount, metas, meta, locks, balance, staked, boostBps, refresh, refreshUser],
+    () => ({ reachable, config, pools, tiers, challenges, lockCount, metas, meta, locks, balance, staked, boostPool, boostBps, refresh, refreshUser }),
+    [reachable, config, pools, tiers, challenges, lockCount, metas, meta, locks, balance, staked, boostPool, boostBps, refresh, refreshUser],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

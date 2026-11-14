@@ -9,8 +9,9 @@ import { fromUnits, view } from "./near";
  * Two different NEAR numbers matter and they must not be confused:
  *  - backing  = held + staked. It gates what you can do in this app, and the
  *               app alone: the vault never sees it.
- *  - staked   = the balance in the whitelisted staking pool. The vault reads
- *               only this, and only to multiply a Challenge reward.
+ *  - staked   = the balance in the staking pools (the real validator pool plus
+ *               the testnet demo pool). The vault reads only the lock's own
+ *               pool, and only to multiply a Challenge reward.
  */
 
 export const YOCTO = 10n ** 24n;
@@ -100,9 +101,14 @@ async function readBacking(account: string): Promise<NearBacking> {
         return 0n;
       }
     })(),
-    view<string>(CONFIG.contracts.staking_pool, "get_account_staked_balance", { account_id: account })
-      .then((v) => BigInt(v))
-      .catch(() => 0n),
+    // Real validator pool plus the testnet demo pool that seeded accounts use.
+    Promise.all(
+      [CONFIG.contracts.validator_pool, CONFIG.contracts.staking_pool].map((pool) =>
+        view<string>(pool, "get_account_staked_balance", { account_id: account })
+          .then((v) => BigInt(v))
+          .catch(() => 0n),
+      ),
+    ).then(([a, b]) => a + b),
   ]);
   return { held, staked, total: held + staked };
 }

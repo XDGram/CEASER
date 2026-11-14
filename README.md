@@ -43,6 +43,24 @@ Results observed on testnet:
 | `finalize(C1)` | `succeeded`, 16k base pool, 4k boost reserve |
 | B claims | 50k principal + 20k reward at `boost_bps` 12500, reserve left at 0 |
 
+### Real NEAR validator staking, verified
+
+The boost reads `get_account_staked_balance` from the lock's staking pool, which is
+the view method of NEAR's core staking-pool contract. So it works with real
+validators, not only the demo pool. Verified on testnet against the validator pool
+`legends.pool.f863973.m0`, on an identical isolated deployment of the vault:
+
+| Step | Observed | Tx |
+|---|---|---|
+| Owner whitelists `legends.pool.f863973.m0` | `add_staking_pool` ok | `6aLUxBTPj19NEdkquy6JSdCU1Y6PhbAYNB5yR5XMcdQ1` |
+| A fresh account stakes 10.5 NEAR with the validator | pool reports 10.5 NEAR staked | `Dy5bKgAHgHnvCes41NSxzngPpBHXHAGVXef8bbGzESfL` |
+| Two 100k locks join the same Challenge, one with that stake, one without | both accepted | |
+| Both claim after the deadline | staker: reward 4,633 at `boost_bps` 11000; no stake: 3,788 at 10000 | `J9mvffWkYWWCdCyhGLEX9uv5gXQLEkPyFakCWz147UzE`, `sptR3fVrCSfRPSGjHRuWQ5DVkjd4B5NZFH7qMvSUQ5C` |
+
+The live vault whitelists the same validator pool, and the app makes it the default
+boost pool for new locks. Stake from any NEAR wallet's staking page; the vault reads
+it at claim time. The demo pool below stays only for the seeded demo locks.
+
 Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json)):
 
 | Contract | Testnet account |
@@ -50,7 +68,8 @@ Live testnet deployment (also in [scripts/deployed.json](scripts/deployed.json))
 | Vault | `ceaser-vault-756e8a.testnet` |
 | Test token (CSTEST, 18 decimals) | `ceaser-token-756e8a.testnet` |
 | Mock oracle | `ceaser-oracle-756e8a.testnet` |
-| Mock staking pool | `ceaser-pool-756e8a.testnet` |
+| Boost staking pool (real NEAR validator) | `legends.pool.f863973.m0` |
+| Demo staking pool (seeded locks only) | `ceaser-pool-756e8a.testnet` |
 | Treasury (vault owner) | `ceaser-treasury-756e8a.testnet` |
 
 The vault owner is a separate treasury account, not the vault itself. It
@@ -91,7 +110,7 @@ NEAR is not a side feature in CEASER; it is what gives every action weight.
 
 | NEAR role | What it does | Enforced by |
 |---|---|---|
-| **Reward boost** | NEAR staked in a whitelisted pool multiplies your share of any Challenge pool, up to 2x | the vault contract, at claim time |
+| **Reward boost** | NEAR staked with a real NEAR validator (testnet: `legends.pool.f863973.m0`) multiplies your share of any Challenge pool, up to 2x | the vault contract, at claim time |
 | **Price of a voice** | Every Floor or community post and reply costs 0.01 NEAR, paid to the protocol treasury; each post links its fee transaction | the app, which verifies the transfer on chain before publishing |
 | **Backing tiers** | NEAR held plus staked sets your tier: Holder (1), Backer (10), Patron (100), Whale (1,000) | the app, from on-chain balances |
 | **Right to post** | Posting needs at least 1 NEAR in the account | the app |

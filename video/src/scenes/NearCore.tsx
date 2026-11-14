@@ -98,6 +98,11 @@ export function NearCore() {
           <div style={{ position: "absolute", top: 790, left: 0, right: 0, textAlign: "center", fontFamily: inter, fontWeight: 600, fontSize: 64, letterSpacing: "-0.03em", opacity: prog(frame, TWO - 0.1, TWO + 0.3) }}>
             Up to <span style={{ color: C.accent }}>2x</span> the rewards.
           </div>
+          <div style={{ position: "absolute", top: 905, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: prog(frame, TWO + 0.4, TWO + 0.8) }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 26px", borderRadius: 999, border: `1px solid ${C.line}`, background: C.surface, fontFamily: inter, fontSize: 28, color: C.ink2 }}>
+              <NearMark size={30} /> Stake with a real NEAR validator. The vault reads it on chain.
+            </div>
+          </div>
         </AbsoluteFill>
       )}
 

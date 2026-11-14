@@ -59,7 +59,7 @@ export function NearCore() {
   const figures = [
     { big: f ? formatNear(f.feesYocto, 2) : "…", unit: "Ⓝ", small: `paid to the treasury by ${f ? f.paidPosts : "…"} posts, each a verified transfer` },
     { big: f ? formatNear(f.backingYocto, 0) : "…", unit: "Ⓝ", small: `held and staked by ${f ? f.holders : "…"} active lockers` },
-    { big: f ? formatNear(f.stakedYocto, 0) : "…", unit: "Ⓝ", small: "staked in the testnet staking pool (a mock with NEAR's validator-pool interface), earning reward boosts" },
+    { big: f ? formatNear(f.stakedYocto, 0) : "…", unit: "Ⓝ", small: "staked by active lockers in the vault's boost pools (a real NEAR validator plus the testnet demo pool), earning reward boosts" },
   ];
   return (
     <Reveal id="near" className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-24 sm:pt-32">

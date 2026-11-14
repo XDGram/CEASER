@@ -22,7 +22,7 @@ const PORTIONS = [25, 50, 75, 100];
 
 export function LockSection() {
   const { accountId, call, toast, returnedTx } = useWallet();
-  const { challenges, pools, config, meta, balance, refresh, refreshUser, boostBps, staked, tiers } = useProtocol();
+  const { challenges, pools, config, meta, balance, refresh, refreshUser, boostBps, staked, boostPool, tiers } = useProtocol();
   const navigate = useNavigate();
   const [stage, setStage] = useState<LockStage | null>(null);
   const [stageLabel, setStageLabel] = useState("");
@@ -39,14 +39,14 @@ export function LockSection() {
   const [sinkKind, setSinkKind] = useState<SinkKind>("default");
   const [sinkChallenge, setSinkChallenge] = useState("");
   const [sinkAccount, setSinkAccount] = useState("");
-  const [pool, setPool] = useState<string>(pools[0] ?? "");
+  const [pool, setPool] = useState<string>(pools.length ? boostPool : "");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [showJson, setShowJson] = useState(false);
 
   useEffect(() => {
-    if (!pool && pools.length) setPool(pools[0]);
-  }, [pools, pool]);
+    if (!pool && pools.length) setPool(boostPool);
+  }, [pools, pool, boostPool]);
 
   const [params] = useSearchParams();
   useEffect(() => {
@@ -351,7 +351,7 @@ export function LockSection() {
               {sinkKind === "default" && (
                 <div className="field">
                   <span>Staking pool (NEAR boost)</span>
-                  <Select value={pool} onChange={setPool} options={[{ value: "", label: "None", hint: "No boost" }, ...pools.map((p) => ({ value: p, label: p, hint: "Whitelisted staking pool" }))]} />
+                  <Select value={pool} onChange={setPool} options={[{ value: "", label: "None", hint: "No boost" }, ...pools.map((p) => ({ value: p, label: p, hint: p === CONFIG.contracts.validator_pool ? "Real NEAR validator" : p === CONFIG.contracts.staking_pool ? "Demo pool (testnet stand-in)" : "Whitelisted staking pool" }))]} />
                 </div>
               )}
             </div>
@@ -379,7 +379,9 @@ export function LockSection() {
             <p className="mt-2 text-[12.5px] text-ink-2 leading-relaxed">
               {accountId
                 ? staked !== null
-                  ? `${fromUnits(staked, 24, 0)} NEAR staked in ${CONFIG.contracts.staking_pool}. Applied to your share of any Challenge pool at claim time.`
+                  ? boostPool === CONFIG.contracts.validator_pool
+                    ? `${fromUnits(staked, 24, 2)} NEAR staked with ${boostPool}, a real NEAR validator. Stake from your wallet; the vault reads it at claim time and boosts your share of the Challenge pool.`
+                    : `${fromUnits(staked, 24, 0)} NEAR staked in ${boostPool}. Applied to your share of any Challenge pool at claim time.`
                   : "Reading your staked balance…"
                 : "Connect a wallet to read your staked balance in the whitelisted pool."}
             </p>
