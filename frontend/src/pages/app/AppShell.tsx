@@ -7,6 +7,7 @@ import { Mark } from "../../components/Mark";
 import { Pfp } from "../../components/Pfp";
 import { profilePath } from "../../lib/profile";
 import { ActivityToasts } from "../../components/ActivityToasts";
+import { tierOf, useNearBacking } from "../../lib/nearTier";
 
 const tabs = [
   ["Overview", "/app", true],
@@ -32,6 +33,7 @@ function Tabs() {
 export function AppShell() {
   const { ready, accountId, isDemo, connect, disconnect } = useWallet();
   const { boostBps, reachable } = useProtocol();
+  const { backing } = useNearBacking(accountId);
   const navigate = useNavigate();
   // Profiles are public: anyone can read /app/u/:account without a wallet.
   const publicPage = useLocation().pathname.startsWith("/app/u/");
@@ -54,11 +56,16 @@ export function AppShell() {
             </nav>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="pill hidden md:inline-flex">boost {mult(boostBps)}</span>
+            {accountId && backing && (
+              <Link to={`${profilePath(accountId)}#near-backing`} className="pill max-sm:hidden! hover:border-ink hover:text-ink" title="Your NEAR backing and what it unlocks in the app">
+                {tierOf(backing.total).name}
+              </Link>
+            )}
+            <span className="pill max-md:hidden!" title="Reward multiplier the vault applies, from staked NEAR only">boost {mult(boostBps)}</span>
             {accountId ? (
               <>
                 {isDemo && (
-                  <span className="pill hidden sm:inline-flex" title="A testnet account created in this browser. Its key lives only here.">
+                  <span className="pill max-sm:hidden!" title="A testnet account created in this browser. Its key lives only here.">
                     demo account
                   </span>
                 )}
