@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CONFIG } from "../config";
 import { supabase } from "./floor";
-import { computeCommunityStats, loadCommunities, lockChallenge, type Community } from "./community";
+import { loadCommunities, lockChallenge, type Community } from "./community";
 import { fetchAllLocks, fromUnits, tokenMeta, view } from "./near";
 import type { Challenge, Lock } from "./types";
 
@@ -133,6 +133,19 @@ function lockEvent(l: Lock, challenges: Challenge[], communities: Community[], d
   };
 }
 
+/** Committed volume: the sum of total_locked over a community's Challenges. */
+function committedOf(c: Community, challenges: Challenge[]): bigint {
+  return challenges.filter((x) => c.challenge_ids.includes(x.id)).reduce((a, x) => a + BigInt(x.total_locked), 0n);
+}
+
+/** Communities ranked by committed volume, highest first. */
+function rankOf(communities: Community[], challenges: Challenge[]): Map<string, number> {
+  const ranked = communities
+    .map((c) => ({ id: c.id, v: committedOf(c, challenges) }))
+    .sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : a.id.localeCompare(b.id)));
+  return new Map(ranked.map((r, i) => [r.id, i + 1]));
+}
+
 interface Sources {
   challenges: Challenge[];
   locks: Lock[];
@@ -143,15 +156,39 @@ interface Sources {
 
 /** One read of everything the engine needs. */
 async function readSources(): Promise<Sources> {
+  const [cheap, locks] = await (async () => {
+    const c = await readCheap();
+    return [c, await fetchAllLocks(c.count)] as const;
+  })();
+  return { challenges: cheap.challenges, locks, communities: cheap.communities, decimals: cheap.decimals, symbol: cheap.symbol };
+}
+
+interface Cheap {
+  count: number;
+  challenges: Challenge[];
+  communities: Community[];
+  decimals: number;
+  symbol: string;
+}
+
+/**
+ * The two vault views plus the community list. Sweeping every lock costs one
+ * view per active lock, so the poll takes this first and only sweeps when
+ * something here moved.
+ */
+async function readCheap(): Promise<Cheap> {
   const [count, challenges, communities, meta] = await Promise.all([
     view<number>(CONFIG.contracts.vault, "get_lock_count"),
     view<Challenge[]>(CONFIG.contracts.vault, "get_challenges", { from_index: 0, limit: 50 }),
     loadCommunities().catch(() => [] as Community[]),
     tokenMeta(CONFIG.contracts.token).catch(() => ({ symbol: "CSTEST", decimals: 18, name: "CSTEST" })),
   ]);
-  const locks = await fetchAllLocks(count);
-  return { challenges, locks, communities, decimals: meta.decimals, symbol: meta.symbol };
+  return { count, challenges, communities, decimals: meta.decimals, symbol: meta.symbol };
 }
+
+/** Changes here mean a lock changed too, so the sweep is worth its cost. */
+const signatureOf = (c: Cheap) =>
+  `${c.count}|` + c.challenges.map((x) => `${x.id}:${x.total_locked}:${x.penalty_total}:${x.sponsor_total}:${x.state}`).join(",");
 
 /**
  * Dated history, newest first: locks and joins by their start_ts, and Supabase
@@ -195,65 +232,87 @@ export async function recentActivity(opts: { communityId?: string; limit?: numbe
 }
 
 interface Snapshot {
+  /** Absent when this poll skipped the lock sweep; the previous map carries over. */
   locks: Map<number, { status: Lock["status"]; claimed: number; reward: boolean }>;
   challenges: Map<number, { sponsor: bigint; state: Challenge["state"] }>;
   committed: Map<string, bigint>;
   ranks: Map<string, number>;
+  signature: string;
   lastPost: string;
   lastReaction: string;
 }
 
-function snapshotOf(s: Sources, lastPost: string, lastReaction: string): Snapshot {
-  const committed = new Map<string, bigint>();
-  const ranked: { id: string; v: bigint }[] = [];
-  for (const c of s.communities) {
-    const st = computeCommunityStats(c, s.challenges, s.locks, s.decimals);
-    committed.set(c.id, st.committed);
-    ranked.push({ id: c.id, v: st.committed });
-  }
-  ranked.sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : a.id.localeCompare(b.id)));
+function snapshotOf(c: Cheap, locks: Snapshot["locks"], lastPost: string, lastReaction: string): Snapshot {
   return {
-    locks: new Map(s.locks.map((l) => [l.id, { status: l.status, claimed: l.tranches.filter((t) => t.claimed).length, reward: l.reward_claimed }])),
-    challenges: new Map(s.challenges.map((c) => [c.id, { sponsor: BigInt(c.sponsor_total), state: c.state }])),
-    committed,
-    ranks: new Map(ranked.map((r, i) => [r.id, i + 1])),
+    locks,
+    challenges: new Map(c.challenges.map((x) => [x.id, { sponsor: BigInt(x.sponsor_total), state: x.state }])),
+    committed: new Map(c.communities.map((x) => [x.id, committedOf(x, c.challenges)])),
+    ranks: rankOf(c.communities, c.challenges),
+    signature: signatureOf(c),
     lastPost,
     lastReaction,
   };
 }
+
+const lockMapOf = (locks: Lock[]): Snapshot["locks"] =>
+  new Map(locks.map((l) => [l.id, { status: l.status, claimed: l.tranches.filter((t) => t.claimed).length, reward: l.reward_claimed }]));
 
 /**
  * Polls every 20 seconds and reports what changed since the previous poll.
  * The first poll only establishes a baseline, so nothing already on chain is
  * announced as if it had just happened.
  */
-export function useLiveActivity(opts: { communityId?: string } = {}): { events: ActivityEvent[]; latest: ActivityEvent | null } {
-  const { communityId } = opts;
-  const [events, setEvents] = useState<ActivityEvent[]>([]);
-  const snap = useRef<Snapshot | null>(null);
-  const seen = useRef<Set<string>>(new Set());
+/**
+ * One poller for the whole app. Several components subscribe (the pop-ups and
+ * the leaderboard), and a second hook instance must not mean a second sweep of
+ * the chain, so the timer, the snapshot and the event list live here.
+ */
+const engine = {
+  snap: null as Snapshot | null,
+  sweepTick: 0,
+  seen: new Set<string>(),
+  events: [] as ActivityEvent[],
+  listeners: new Set<() => void>(),
+  timer: null as number | null,
+  running: false,
+};
 
-  const push = useCallback(
-    (fresh: ActivityEvent[]) => {
-      const keep = fresh.filter((e) => !seen.current.has(e.id) && (communityId ? e.communityId === communityId : true));
-      if (!keep.length) return;
-      keep.forEach((e) => seen.current.add(e.id));
-      setEvents((prev) => [...keep, ...prev].slice(0, 50));
-    },
-    [communityId],
-  );
+function emit(fresh: ActivityEvent[]) {
+  const keep = fresh.filter((e) => !engine.seen.has(e.id));
+  if (!keep.length) return;
+  keep.forEach((e) => engine.seen.add(e.id));
+  engine.events = [...keep, ...engine.events].slice(0, 50);
+  engine.listeners.forEach((fn) => fn());
+}
 
-  const tick = useCallback(async () => {
-    // A background tab does not need to poll the chain.
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-    let s: Sources;
+async function pollOnce(): Promise<void> {
+  // A background tab does not need to poll the chain.
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  if (engine.running) return;
+  engine.running = true;
+  try {
+    const prev = engine.snap;
+    let cheap: Cheap;
     try {
-      s = await readSources();
+      cheap = await readCheap();
     } catch {
       return; // a flaky read must never look like an absence of activity
     }
+    // Sweeping every lock costs a view each, so only do it when the cheap
+    // signature moved, on the first poll, or every sixth poll (two minutes) as
+    // a backstop for a lock whose change touches no Challenge, such as an exit
+    // whose penalty goes to an account rather than a pool.
+    engine.sweepTick += 1;
+    const sweep = !prev || prev.signature !== signatureOf(cheap) || engine.sweepTick % 6 === 0;
+    let locks: Lock[] | null = null;
+    if (sweep) {
+      try {
+        locks = await fetchAllLocks(cheap.count);
+      } catch {
+        return;
+      }
+    }
     const nowIso = new Date().toISOString();
-    const prev = snap.current;
 
     let posts: PostRow[] = [];
     let reactions: ReactionRow[] = [];
@@ -266,10 +325,15 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
       reactions = (r.data ?? []) as ReactionRow[];
     }
 
-    const next = snapshotOf(s, posts.length ? posts[posts.length - 1].created_at : (prev?.lastPost ?? nowIso), reactions.length ? reactions[reactions.length - 1].created_at : (prev?.lastReaction ?? nowIso));
+    const next = snapshotOf(
+      cheap,
+      locks ? lockMapOf(locks) : (prev?.locks ?? new Map()),
+      posts.length ? posts[posts.length - 1].created_at : (prev?.lastPost ?? nowIso),
+      reactions.length ? reactions[reactions.length - 1].created_at : (prev?.lastReaction ?? nowIso),
+    );
 
     if (!prev) {
-      snap.current = next;
+      engine.snap = next;
       return;
     }
 
@@ -277,23 +341,23 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
     const live = { live: true, at: null as number | null };
 
     // Locks: created, exited, tranche claimed, reward claimed.
-    for (const l of s.locks) {
+    for (const l of locks ?? []) {
       const before = prev.locks.get(l.id);
-      const base = lockEvent(l, s.challenges, s.communities, s.decimals, s.symbol);
+      const base = lockEvent(l, cheap.challenges, cheap.communities, cheap.decimals, cheap.symbol);
       if (!before) {
         out.push({ ...base, ...live });
         continue;
       }
       if (before.status === "active" && l.status === "exited") {
         const penalty = BigInt(l.amount) - BigInt(l.claimed_amount);
-        const sink = "challenge" in l.penalty_sink ? challengeTitle(s.challenges, l.penalty_sink.challenge) : null;
+        const sink = "challenge" in l.penalty_sink ? challengeTitle(cheap.challenges, l.penalty_sink.challenge) : null;
         out.push({
           ...base,
           ...live,
           id: `exit-${l.id}`,
           kind: "exit",
-          text: `left a lock early and paid ${fromUnits(penalty, s.decimals, 0)} ${s.symbol}${sink ? ` to the stayers of ${sink}` : " to the treasury"}`,
-          amount: `${fromUnits(penalty, s.decimals, 0)} ${s.symbol}`,
+          text: `left a lock early and paid ${fromUnits(penalty, cheap.decimals, 0)} ${cheap.symbol}${sink ? ` to the stayers of ${sink}` : " to the treasury"}`,
+          amount: `${fromUnits(penalty, cheap.decimals, 0)} ${cheap.symbol}`,
         });
       }
       const claimedNow = l.tranches.filter((t) => t.claimed).length;
@@ -303,8 +367,8 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
           ...live,
           id: `claim-${l.id}-${claimedNow}`,
           kind: "claim",
-          text: `claimed ${fromUnits(BigInt(l.claimed_amount), s.decimals, 0)} ${s.symbol} from a lock`,
-          amount: `${fromUnits(BigInt(l.claimed_amount), s.decimals, 0)} ${s.symbol}`,
+          text: `claimed ${fromUnits(BigInt(l.claimed_amount), cheap.decimals, 0)} ${cheap.symbol} from a lock`,
+          amount: `${fromUnits(BigInt(l.claimed_amount), cheap.decimals, 0)} ${cheap.symbol}`,
         });
       }
       if (!before.reward && l.reward_claimed) {
@@ -313,7 +377,7 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
     }
 
     // Challenges: sponsor money in, and finalize.
-    for (const c of s.challenges) {
+    for (const c of cheap.challenges) {
       const before = prev.challenges.get(c.id);
       if (!before) continue;
       const sponsor = BigInt(c.sponsor_total);
@@ -323,13 +387,13 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
           id: `sponsor-${c.id}-${sponsor}`,
           kind: "sponsor",
           account: null,
-          text: `${fromUnits(delta, s.decimals, 0)} ${s.symbol} sponsored into ${c.title}`,
+          text: `${fromUnits(delta, cheap.decimals, 0)} ${cheap.symbol} sponsored into ${c.title}`,
           href: `/app/challenges/${c.id}`,
           at: null,
           live: true,
           demo: false,
-          communityId: communityOf(s.communities, c.id),
-          amount: `${fromUnits(delta, s.decimals, 0)} ${s.symbol}`,
+          communityId: communityOf(cheap.communities, c.id),
+          amount: `${fromUnits(delta, cheap.decimals, 0)} ${cheap.symbol}`,
         });
       }
       if (before.state === "active" && c.state !== "active") {
@@ -342,18 +406,18 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
           at: null,
           live: true,
           demo: false,
-          communityId: communityOf(s.communities, c.id),
+          communityId: communityOf(cheap.communities, c.id),
         });
       }
     }
 
     // Communities: milestones crossed and rank moves.
-    for (const c of s.communities) {
+    for (const c of cheap.communities) {
       const was = prev.committed.get(c.id);
       const now = next.committed.get(c.id) ?? 0n;
       if (was === undefined) continue;
       if (now > was) {
-        const unit = 10n ** BigInt(s.decimals);
+        const unit = 10n ** BigInt(cheap.decimals);
         for (const m of c.milestones) {
           const target = BigInt(Math.round(Number(m))) * unit;
           if (was < target && now >= target) {
@@ -361,7 +425,7 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
               id: `ms-${c.id}-${m}`,
               kind: "milestone",
               account: null,
-              text: `${c.name} passed ${fromUnits(target, s.decimals, 0)} ${s.symbol} committed`,
+              text: `${c.name} passed ${fromUnits(target, cheap.decimals, 0)} ${cheap.symbol} committed`,
               href: `/app/c/${c.id}`,
               at: null,
               live: true,
@@ -390,7 +454,7 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
 
     // Supabase rows created since the last poll.
     const byId = new Map(posts.map((p) => [p.id, p]));
-    for (const p of posts) out.push({ ...postEvent(p, s.communities), live: true });
+    for (const p of posts) out.push({ ...postEvent(p, cheap.communities), live: true });
     for (const r of reactions) {
       const target = byId.get(r.post_id);
       out.push({
@@ -402,27 +466,47 @@ export function useLiveActivity(opts: { communityId?: string } = {}): { events: 
         at: secs(r.created_at),
         live: true,
         demo: isDemo(r.account, target?.meta),
-        communityId: target ? (target.community_id ?? communityOf(s.communities, target.challenge_id)) : null,
+        communityId: target ? (target.community_id ?? communityOf(cheap.communities, target.challenge_id)) : null,
       });
     }
 
-    snap.current = next;
-    if (out.length) push(out);
-  }, [push]);
+    engine.snap = next;
+    if (out.length) emit(out);
+  } finally {
+    engine.running = false;
+  }
+}
+
+/**
+ * Polls every 20 seconds and reports what changed since the previous poll.
+ * The first poll only establishes a baseline, so nothing already on chain is
+ * announced as if it had just happened.
+ */
+export function useLiveActivity(opts: { communityId?: string } = {}): { events: ActivityEvent[]; latest: ActivityEvent | null } {
+  const { communityId } = opts;
+  const [, bump] = useState(0);
 
   useEffect(() => {
-    let stop = false;
-    const run = () => {
-      if (!stop) void tick();
-    };
-    run();
-    const id = window.setInterval(run, POLL_MS);
+    const listener = () => bump((n) => n + 1);
+    engine.listeners.add(listener);
+    if (engine.timer === null) {
+      void pollOnce();
+      engine.timer = window.setInterval(() => void pollOnce(), POLL_MS);
+    }
     return () => {
-      stop = true;
-      window.clearInterval(id);
+      engine.listeners.delete(listener);
+      if (!engine.listeners.size && engine.timer !== null) {
+        window.clearInterval(engine.timer);
+        engine.timer = null;
+      }
     };
-  }, [tick]);
+  }, []);
 
+  const events = useMemo(
+    () => (communityId ? engine.events.filter((e) => e.communityId === communityId) : engine.events),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [communityId, engine.events],
+  );
   return useMemo(() => ({ events, latest: events[0] ?? null }), [events]);
 }
 
@@ -437,18 +521,15 @@ export function useRankMovement(): Map<string, number> {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      let s: Sources;
+      let c: Cheap;
       try {
-        s = await readSources();
+        c = await readCheap();
       } catch {
         return;
       }
-      if (cancelled || !s.communities.length) return;
-      const ranked = s.communities
-        .map((c) => ({ id: c.id, v: computeCommunityStats(c, s.challenges, s.locks, s.decimals).committed }))
-        .sort((a, b) => (b.v > a.v ? 1 : b.v < a.v ? -1 : a.id.localeCompare(b.id)));
+      if (cancelled || !c.communities.length) return;
       const now: Record<string, number> = {};
-      ranked.forEach((r, i) => (now[r.id] = i + 1));
+      for (const [id, rank] of rankOf(c.communities, c.challenges)) now[id] = rank;
 
       let before: Record<string, number> = {};
       try {
