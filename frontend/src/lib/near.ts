@@ -211,3 +211,24 @@ export function stakedBalance(pool: string, owner: string): Promise<bigint> {
   }
   return p;
 }
+
+// ---------- oracle ----------
+
+/**
+ * Time-weighted average price of `token` over `windowSec` from the oracle in
+ * config.ts, through the same gated, failover view path as every other read.
+ * Null on any failure or when the oracle has no observations.
+ */
+export async function twap(token: string, windowSec: number): Promise<bigint | null> {
+  try {
+    const v = await view<string | null>(CONFIG.contracts.oracle, "twap", { token, window_sec: windowSec });
+    return v === null || v === undefined ? null : BigInt(v);
+  } catch {
+    return null;
+  }
+}
+
+/** Share of a lock's original amount still behind unclaimed tranches, in percent. */
+export function protectedPct(lock: Lock): number {
+  return lock.tranches.filter((t) => !t.claimed).reduce((a, t) => a + t.fraction_bps, 0) / 100;
+}
