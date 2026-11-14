@@ -91,7 +91,7 @@ export function Ladder({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="pixel text-[11px] text-ink-3 w-4 shrink-0">{i + 1}</span>
                   {mode === "edit" ? (
-                    <span className="flex items-center gap-1.5 flex-wrap text-[13px] text-ink-2">
+                    <span className="flex flex-1 items-center gap-1.5 flex-wrap text-[13px] text-ink-2">
                       Unlock
                       <input
                         className="input !w-[62px] !px-2 !py-1 text-center text-[13px]"
@@ -108,10 +108,10 @@ export function Ladder({
                         value={shown(drafts[`${i}:multiple`], r.multiple)}
                         onChange={(e) => edit(i, "multiple", e.target.value)}
                       />
-                      x
+                      <span className="mr-1">x</span>
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm !px-1.5"
+                        className="btn btn-ghost btn-sm !px-1.5 ml-auto"
                         disabled={rungs.length <= 1}
                         onClick={() => remove(i)}
                         aria-label={`Remove step ${i + 1}`}
