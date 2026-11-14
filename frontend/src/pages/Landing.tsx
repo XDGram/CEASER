@@ -32,8 +32,8 @@ export function Landing() {
       <main className="overflow-x-clip">
         <Hero />
         <Stats />
-        <NearCore />
         <Intro />
+        <NearCore />
         <Story />
         <HowItWorks />
         <Mechanics />
