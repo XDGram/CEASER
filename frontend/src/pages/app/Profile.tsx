@@ -7,6 +7,7 @@ import { boostFor, estimateReward, useProtocol } from "../../lib/protocol";
 import { errorText, useWallet } from "../../lib/wallet";
 import { firstPostAt, loadAuthorPosts, loadNames, setDisplayName, type FloorPost } from "../../lib/floor";
 import { computeBadges, computeStats, convictionRank, joinedChallengeId, lockActivity, penaltyPaid, postActivity, profilePath, strategyLabel, type ActivityItem } from "../../lib/profile";
+import { COMMUNITY_REQUIREMENT, GATE_NOTE, POWERS, TIERS, YOCTO, formatNear, nextTier, tierOf, useNearBacking, type NearBacking } from "../../lib/nearTier";
 import type { Challenge, Lock } from "../../lib/types";
 import { Pfp } from "../../components/Pfp";
 import { PostCard } from "../../components/FloorFeed";
@@ -80,7 +81,17 @@ export function Profile() {
   const stats = useMemo(() => computeStats(locks, challenges), [locks, challenges]);
   const rank = useMemo(() => (data ? convictionRank(data.all, account) : null), [data, account]);
   const boostBps = boostFor(data?.staked ?? 0n, tiers);
-  const badges = useMemo(() => (data ? computeBadges({ account, locks, challenges, decimals: tm.decimals, sponsored: data.sponsored.size > 0, boostBps }) : []), [data, account, locks, challenges, tm.decimals, boostBps]);
+  const { backing } = useNearBacking(account);
+  const badges = useMemo(() => {
+    if (!data) return [];
+    const base = computeBadges({ account, locks, challenges, decimals: tm.decimals, sponsored: data.sponsored.size > 0, boostBps });
+    // computeBadges awards "NEAR backer" from the staked-only boost. Here the
+    // badge follows total backing, held plus staked, so replace it.
+    const rest = base.filter((b) => b.key !== "near");
+    const total = backing?.total ?? 0n;
+    if (total >= 10n * YOCTO) rest.push({ key: "near", label: "NEAR backer", tip: `${formatNear(total)} NEAR held and staked, the Backer tier or above` });
+    return rest;
+  }, [data, account, locks, challenges, tm.decimals, boostBps, backing]);
   const name = data?.names[account];
   const joinedTs = useMemo(() => {
     const first = locks.reduce((a, l) => (a === 0 || l.start_ts < a ? l.start_ts : a), 0);
@@ -157,6 +168,8 @@ export function Profile() {
 
       {failed && <div className="mt-5 card p-6 text-[13px] text-bad">Could not read this profile right now. It retries when the vault {reachable === false ? "comes back" : "answers"}.</div>}
 
+      <NearBackingCard backing={backing} boostBps={boostBps} isOwn={isOwn} />
+
       <StatsBand stats={stats} loading={loading} decimals={tm.decimals} symbol={tm.symbol} activeCount={locks.filter((l) => l.status === "active").length} exitedCount={locks.filter((l) => l.status === "exited").length} />
 
       <div className="mt-8 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-line pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -226,6 +239,84 @@ function NameLine({ account, name, isOwn, onSaved }: { account: string; name: st
           {name ? "edit display name" : "set a display name"}
         </button>
       )}
+    </div>
+  );
+}
+
+/** What this account backs CEASER with, and what that opens up. */
+function NearBackingCard({ backing, boostBps, isOwn }: { backing: NearBacking | null; boostBps: number; isOwn: boolean }) {
+  const total = backing?.total ?? 0n;
+  const tier = tierOf(total);
+  const next = nextTier(total);
+  const toGo = next ? BigInt(next.min) * YOCTO - total : 0n;
+  const rows: { k: string; v: string }[] = [
+    { k: "Held", v: backing ? formatNear(backing.held) : "…" },
+    { k: "Staked", v: backing ? formatNear(backing.staked) : "…" },
+    { k: "Total backing", v: backing ? formatNear(total) : "…" },
+  ];
+  return (
+    <div id="near-backing" className="mt-5 card p-5 sm:p-6 scroll-mt-20">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[17px] tracking-tight">NEAR backing</h2>
+          <p className="mt-0.5 text-[12px] text-ink-2">Held plus staked NEAR. It decides what {isOwn ? "you" : "this account"} can do in the app.</p>
+        </div>
+        <span className={`pill ${tier.name === "Visitor" ? "" : "border-ink text-ink"}`}>{tier.name}</span>
+      </div>
+
+      <div className="mt-4 grid sm:grid-cols-3 gap-px bg-line overflow-hidden rounded-lg">
+        {rows.map((r) => (
+          <div key={r.k} className="bg-surface p-3.5">
+            <div className="text-[10.5px] font-mono uppercase tracking-[0.12em] text-ink-2">{r.k}</div>
+            <div className="mt-1">
+              <span className="pixel text-[20px]">{r.v}</span> <span className="text-[11px] text-ink-3">Ⓝ</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[12px] text-ink-2">
+        {next ? (
+          <>
+            {/* A hair under the next tier still reads as a gap, not as zero. */}
+            {formatNear(toGo) === "0" ? (
+              <>Under <span className="pixel text-[12px] text-ink">0.01</span> Ⓝ</>
+            ) : (
+              <>
+                <span className="pixel text-[12px] text-ink">{formatNear(toGo)}</span> Ⓝ
+              </>
+            )}{" "}
+            more reaches {next.name}, which unlocks: {next.unlocks}.
+          </>
+        ) : (
+          <>Top tier. Everything in the app is open.</>
+        )}
+      </p>
+
+      <div className="mt-4 divide-y divide-line border-t border-line">
+        {POWERS.map((p) => (
+          <div key={p.label} className="py-2 flex items-baseline justify-between gap-3 text-[12.5px]">
+            <span className="text-ink min-w-0">
+              {p.label}
+              {p.note && <span className="block text-[11px] text-ink-3">{p.note}</span>}
+            </span>
+            <span className="text-ink-2 whitespace-nowrap shrink-0">{p.needs}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        {TIERS.map((t) => (
+          <span key={t.name} className={`pill ${t.name === tier.name ? "border-ink text-ink" : ""}`} title={t.unlocks}>
+            {t.name} {t.min > 0 ? `≥ ${t.min.toLocaleString("en-US")}` : "0"} Ⓝ
+          </span>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[11.5px] text-ink-3">
+        The vault reads only staked NEAR, and only for the reward multiplier, currently {mult(boostBps)}. Everything else above is {GATE_NOTE.toLowerCase()}
+      </p>
+      <p className="mt-1 text-[11.5px] text-ink-3">Creating a community needs {formatNear(COMMUNITY_REQUIREMENT, 0)} Ⓝ of backing.</p>
     </div>
   );
 }

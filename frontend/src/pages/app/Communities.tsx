@@ -2,12 +2,13 @@ import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CONFIG } from "../../config";
-import { computeCommunityStats, createCommunity, loadCommunities, type Community, type CommunityStats } from "../../lib/community";
+import { computeCommunityStats, createCommunity, loadCommunities, lockChallenge, type Community, type CommunityStats } from "../../lib/community";
 import { fetchAllLocks, fromUnits, view } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import type { Lock } from "../../lib/types";
 import { errorText, useWallet } from "../../lib/wallet";
 import { useLiveActivity, useRankMovement } from "../../lib/live";
+import { COMMUNITY_REQUIREMENT, GATE_NOTE, formatNear, nearBacking, useNearBacking } from "../../lib/nearTier";
 import { Busy, SectionHead } from "../../components/SectionHead";
 
 const SLUG = /^[a-z0-9-]{3,32}$/;
@@ -18,19 +19,21 @@ const slugify = (s: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 32);
 
-type SortKey = "committed" | "participants" | "conviction" | "retention";
+type SortKey = "committed" | "participants" | "conviction" | "retention" | "near";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "committed", label: "Committed volume" },
   { key: "participants", label: "Participants" },
   { key: "conviction", label: "Conviction" },
   { key: "retention", label: "Retention" },
+  { key: "near", label: "NEAR backing" },
 ];
 
 /** A sort value as a bigint so token amounts and counts compare the same way. */
-function metric(s: CommunityStats, key: SortKey): bigint {
+function metric(s: CommunityStats, key: SortKey, near = 0n): bigint {
   if (key === "committed") return s.committed;
   if (key === "participants") return BigInt(s.activeLockers);
   if (key === "conviction") return s.conviction;
+  if (key === "near") return near;
   return BigInt(Math.round(s.retentionPct * 10));
 }
 
@@ -44,6 +47,7 @@ function gapLabel(gap: bigint, key: SortKey, decimals: number, symbol: string): 
   if (key === "committed") return `${fromUnits(gap, decimals, 0)} ${symbol}`;
   if (key === "participants") return `${gap} locker${gap === 1n ? "" : "s"}`;
   if (key === "conviction") return `${convictionLabel(gap, decimals)} token-days`;
+  if (key === "near") return `${formatNear(gap, 1)} Ⓝ`;
   return `${(Number(gap) / 10).toFixed(1)} points`;
 }
 
@@ -57,6 +61,7 @@ export function Communities() {
   const [failed, setFailed] = useState(false);
   const [sort, setSort] = useState<SortKey>("committed");
   const moves = useRankMovement();
+  const { backing: mine } = useNearBacking(accountId);
   // A rank change detected while the page is open highlights that row briefly.
   const { events } = useLiveActivity();
   const [flash, setFlash] = useState<Set<string>>(new Set());
@@ -88,14 +93,52 @@ export function Communities() {
     return communities.map((c) => ({ c, s: computeCommunityStats(c, challenges, locks, tm.decimals) }));
   }, [communities, locks, challenges, tm.decimals]);
 
-  const ranked = useMemo(() => [...rows].sort((a, b) => {
-    const d = metric(b.s, sort) - metric(a.s, sort);
-    return d > 0n ? 1 : d < 0n ? -1 : a.c.name.localeCompare(b.c.name);
-  }), [rows, sort]);
-  const leader = ranked.length ? metric(ranked[0].s, sort) : 0n;
+  // Each community's NEAR backing: the sum over its active lockers. Read once
+  // per account and cached, so the leaderboard costs a handful of reads.
+  const [nearBy, setNearBy] = useState<Map<string, bigint> | null>(null);
+  useEffect(() => {
+    if (!communities || !locks) return;
+    let cancelled = false;
+    (async () => {
+      const members = new Map<string, Set<string>>();
+      for (const c of communities) {
+        const ids = new Set(c.challenge_ids);
+        const owners = new Set(locks.filter((l) => l.status === "active" && lockChallenge(l) !== null && ids.has(lockChallenge(l) as number)).map((l) => l.owner));
+        members.set(c.id, owners);
+      }
+      const accounts = [...new Set([...members.values()].flatMap((x) => [...x]))];
+      const got = new Map<string, bigint>();
+      for (const a of accounts) {
+        const b = await nearBacking(a).catch(() => null);
+        got.set(a, b?.total ?? 0n);
+      }
+      if (cancelled) return;
+      const out = new Map<string, bigint>();
+      for (const [id, owners] of members) out.set(id, [...owners].reduce((sum, a) => sum + (got.get(a) ?? 0n), 0n));
+      setNearBy(out);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [communities, locks]);
+  const nearOf = useCallback((id: string) => nearBy?.get(id) ?? 0n, [nearBy]);
 
-  const show = (s: CommunityStats) =>
-    sort === "committed" ? `${fromUnits(s.committed, tm.decimals, 0)} ${tm.symbol}` : sort === "participants" ? String(s.activeLockers) : sort === "conviction" ? convictionLabel(s.conviction, tm.decimals) : `${s.retentionPct}%`;
+  const ranked = useMemo(() => [...rows].sort((a, b) => {
+    const d = metric(b.s, sort, nearOf(b.c.id)) - metric(a.s, sort, nearOf(a.c.id));
+    return d > 0n ? 1 : d < 0n ? -1 : a.c.name.localeCompare(b.c.name);
+  }), [rows, sort, nearOf]);
+  const leader = ranked.length ? metric(ranked[0].s, sort, nearOf(ranked[0].c.id)) : 0n;
+
+  const show = (s: CommunityStats, id: string) =>
+    sort === "committed"
+      ? `${fromUnits(s.committed, tm.decimals, 0)} ${tm.symbol}`
+      : sort === "participants"
+        ? String(s.activeLockers)
+        : sort === "conviction"
+          ? convictionLabel(s.conviction, tm.decimals)
+          : sort === "near"
+            ? `${nearBy ? formatNear(nearOf(id), 1) : "…"} Ⓝ`
+            : `${s.retentionPct}%`;
 
   // ---------- create form ----------
   const [name, setName] = useState("");
@@ -114,11 +157,14 @@ export function Communities() {
         ? "That id is taken"
         : null;
 
+  const meetsCommunity = !accountId || (mine !== null && mine.total >= COMMUNITY_REQUIREMENT);
+
   const create = async () => {
     if (!accountId) return connect();
     setBusy(true);
     try {
       if (!name.trim()) throw new Error("Give the community a name");
+      if ((mine?.total ?? 0n) < COMMUNITY_REQUIREMENT) throw new Error(`Creating a community needs ${formatNear(COMMUNITY_REQUIREMENT, 0)} NEAR of backing`);
       if (!effSlug || slugProblem) throw new Error(slugProblem ?? "Pick an id");
       const ms = milestones
         .split(",")
@@ -166,15 +212,15 @@ export function Communities() {
                 <div className="grid grid-cols-3 gap-3 text-[12px]">
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Committed</div>
-                    <div className="pixel text-[18px] mt-1">{fromUnits(s.committed, tm.decimals, 0)}</div>
+                    <div className="pixel text-[15px] sm:text-[18px] mt-1 break-all">{fromUnits(s.committed, tm.decimals, 0)}</div>
                   </div>
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Lockers</div>
-                    <div className="pixel text-[18px] mt-1">{s.activeLockers}</div>
+                    <div className="pixel text-[15px] sm:text-[18px] mt-1 break-all">{s.activeLockers}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">Campaigns</div>
-                    <div className="pixel text-[18px] mt-1">{s.campaigns.active}</div>
+                    <div className="text-[10px] uppercase tracking-[0.12em] text-ink-3 font-mono">NEAR</div>
+                    <div className="pixel text-[15px] sm:text-[18px] mt-1 break-all">{nearBy ? formatNear(nearOf(c.id), 1) : "…"}</div>
                   </div>
                 </div>
                 <div className="mt-auto">
@@ -251,8 +297,8 @@ export function Communities() {
                     <motion.div key={sort} initial={{ width: 0 }} animate={{ width: `${w}%` }} transition={{ duration: 0.5, ease: "easeOut" }} className={`h-full rounded-full ${i === 0 ? "bg-accent" : "bg-ink"}`} />
                   </div>
                   <span className="text-right whitespace-nowrap" data-value>
-                    <span className="pixel text-[14px]">{show(s).split(" ")[0]}</span>
-                    {show(s).includes(" ") && <span className="ml-1 text-[11px] text-ink-2">{show(s).split(" ").slice(1).join(" ")}</span>}
+                    <span className="pixel text-[14px]">{show(s, c.id).split(" ")[0]}</span>
+                    {show(s, c.id).includes(" ") && <span className="ml-1 text-[11px] text-ink-2">{show(s, c.id).split(" ").slice(1).join(" ")}</span>}
                   </span>
                   <div className="col-span-3 sm:hidden h-1 rounded-full bg-paper-2 overflow-hidden -mt-1">
                     <div className={`h-full rounded-full ${i === 0 ? "bg-accent" : "bg-ink"}`} style={{ width: `${w}%` }} />
@@ -262,6 +308,7 @@ export function Communities() {
             })}
           </ol>
           {sort === "conviction" && <p className="mt-2 text-[11px] text-ink-3">Conviction in token-days: amount locked x time to each Challenge's deadline.</p>}
+          {sort === "near" && <p className="mt-2 text-[11px] text-ink-3">Held plus staked NEAR across each community's active lockers. {GATE_NOTE}</p>}
           {sort === "retention" && <p className="mt-2 text-[11px] text-ink-3">Share of the community's locks that are still active.</p>}
         </div>
       )}
@@ -307,11 +354,26 @@ export function Communities() {
           </label>
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-4">
-          <button className="btn btn-accent" disabled={busy || (!!accountId && (!!slugProblem || !name.trim()))} onClick={create}>
+          <button className="btn btn-accent" disabled={busy || (!!accountId && (!!slugProblem || !name.trim() || !meetsCommunity))} onClick={create}>
             <Busy on={busy}>{accountId ? "Create community" : "Connect to create"}</Busy>
           </button>
           <span className="text-[12px] text-ink-2">Created by {accountId ?? "your wallet"}. Attach Challenges from its page.</span>
         </div>
+        <p className={`mt-2 text-[12px] ${meetsCommunity ? "text-ink-2" : "text-bad"}`}>
+          Creating a community needs <span className="pixel text-[12.5px]">{formatNear(COMMUNITY_REQUIREMENT, 0)}</span> Ⓝ backing
+          {accountId ? (
+            mine === null ? (
+              "; reading your balance…"
+            ) : (
+              <>
+                ; you have <span className="pixel text-[12.5px]">{formatNear(mine.total)}</span> Ⓝ{meetsCommunity ? "." : ", so this is out of reach."}
+              </>
+            )
+          ) : (
+            ". Connect a wallet to check yours."
+          )}
+        </p>
+        <p className="mt-1 text-[11.5px] text-ink-3">{GATE_NOTE}</p>
       </div>
     </section>
   );

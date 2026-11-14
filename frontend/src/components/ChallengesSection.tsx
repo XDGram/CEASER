@@ -8,6 +8,7 @@ import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Challenge } from "../lib/types";
 import { Busy, SectionHead } from "./SectionHead";
+import { GATE_NOTE, campaignRequirement, formatNear, useNearBacking } from "../lib/nearTier";
 import { RewardEstimate } from "./RewardEstimate";
 
 function Progress({ value, max }: { value: bigint; max: bigint }) {
@@ -235,6 +236,12 @@ export function ChallengesSection() {
   const [reserve, setReserve] = useState("20");
   const [sponsorAmt, setSponsorAmt] = useState("");
 
+  // Starting a campaign is gated on NEAR backing, scaled by the threshold.
+  const { backing } = useNearBacking(accountId);
+  const required = campaignRequirement(parseFloat(threshold.replace(/,/g, "")) || 0);
+  const backed = backing?.total ?? 0n;
+  const meetsBacking = !accountId || (backing !== null && backed >= required);
+
   const create = async () => {
     setBusy(true);
     try {
@@ -362,11 +369,27 @@ export function ChallengesSection() {
           </div>
           <CreatePreview title={title} threshold={threshold} deadline={deadline} minLock={minLock} reserve={reserve} symbol={tm.symbol} creator={accountId} />
           <div className="mt-6 flex items-center gap-4">
-            <button className="btn btn-accent" disabled={busy} onClick={create}>
+            <button className="btn btn-accent" disabled={busy || !meetsBacking} onClick={create}>
               <Busy on={busy}>{accountId ? "Create Challenge" : "Connect to create"}</Busy>
             </button>
-            <span className="text-[12px] text-ink-2">create_challenge on the vault · anyone can create</span>
+            <span className="text-[12px] text-ink-2">create_challenge on the vault</span>
           </div>
+          <p className={`mt-2 text-[12px] ${meetsBacking ? "text-ink-2" : "text-bad"}`}>
+            Starting this campaign needs <span className="pixel text-[12.5px]">{formatNear(required)}</span> Ⓝ backing
+            {accountId ? (
+              backing === null ? (
+                "; reading your balance…"
+              ) : (
+                <>
+                  ; you have <span className="pixel text-[12.5px]">{formatNear(backed)}</span> Ⓝ
+                  {meetsBacking ? "." : ", so this one is out of reach."}
+                </>
+              )
+            ) : (
+              ". Connect a wallet to check yours."
+            )}
+          </p>
+          <p className="mt-1 text-[11.5px] text-ink-3">2 Ⓝ plus 1 Ⓝ per 1,000,000 tokens of threshold, up to 50 Ⓝ. {GATE_NOTE}</p>
         </motion.div>
       )}
 
