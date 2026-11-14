@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { createPortal } from "react-dom";
 import { CONFIG } from "../config";
 import { awaitExited, clearPendingExit, previewExit, savePendingExit, type ExitPreview } from "../lib/exit";
-import { fromUnits, pct, short, txHash } from "../lib/near";
+import { fromUnits, pct, short, txHash, view } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
 import type { Lock } from "../lib/types";
 import { errorText, useWallet } from "../lib/wallet";
@@ -114,7 +114,10 @@ export function cancelledRungs(lock: Lock): string[] {
   });
 }
 
-function Breakdown({ p, lock, symbol, decimals }: { p: ExitPreview; lock: Lock; symbol: string; decimals: number }) {
+function Breakdown({ p, lock, symbol, decimals, owner }: { p: ExitPreview; lock: Lock; symbol: string; decimals: number; owner: string | null }) {
+  // A lock whose sink account is the vault owner pays the treasury, whether it
+  // was set that way or the vault fell back to it.
+  const toTreasury = p.sink.kind === "account" && (p.sink.treasury || p.sink.account === owner);
   const total = p.remaining > 0n ? p.remaining : 1n;
   const retPct = Number((p.returned * 10000n) / total) / 100;
   const destination =
@@ -122,7 +125,7 @@ function Breakdown({ p, lock, symbol, decimals }: { p: ExitPreview; lock: Lock; 
       ? "Everything left in this lock is already free, so no penalty is charged."
       : p.sink.kind === "challenge"
         ? `Paid to the ${p.sink.stayers} locker${p.sink.stayers === 1 ? "" : "s"} who stay in Challenge #${p.sink.challenge.id}: ${p.sink.challenge.title}`
-        : p.sink.treasury
+        : toTreasury
           ? `Sent to the treasury account ${p.sink.account}`
           : `Sent to ${p.sink.account}`;
   const rungs = cancelledRungs(lock);
@@ -180,6 +183,10 @@ export function ExitDialog({ lock, initialStage, resume, onClose }: { lock: Lock
   const [stage, setStage] = useState<ExitStage>(resume ? { kind: "confirming", hash: resume.hash } : (initialStage ?? { kind: "review" }));
   const [preview, setPreview] = useState<ExitPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [owner, setOwner] = useState<string | null>(null);
+  useEffect(() => {
+    view<string>(CONFIG.contracts.vault, "get_owner").then(setOwner).catch(() => setOwner(null));
+  }, []);
   const dialogRef = useRef<HTMLDivElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(typeof document !== "undefined" ? (document.activeElement as HTMLElement) : null);
@@ -295,7 +302,7 @@ export function ExitDialog({ lock, initialStage, resume, onClose }: { lock: Lock
           </p>
           <div className="mt-5">
             {preview ? (
-              <Breakdown p={preview} lock={lock} symbol={tm.symbol} decimals={tm.decimals} />
+              <Breakdown p={preview} lock={lock} symbol={tm.symbol} decimals={tm.decimals} owner={owner} />
             ) : previewError ? (
               <div className="rounded-xl border border-bad/30 bg-bad/5 p-4 text-[13px] text-bad">Could not read this lock's exit terms: {previewError}</div>
             ) : (

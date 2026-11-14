@@ -5,6 +5,7 @@ import { countdown, fromUnits, mult, nowTs } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import { RewardEstimate } from "../../components/RewardEstimate";
+import { protectedPct } from "../../lib/near";
 import { useCallback, useEffect, useState } from "react";
 import { loadFeed, type FeedData } from "../../lib/floor";
 import { Pfp } from "../../components/Pfp";
@@ -128,6 +129,11 @@ export function Overview() {
                       Lock #{l.id} · {fromUnits(BigInt(l.amount) - BigInt(l.claimed_amount), m.decimals, 0)} {m.symbol}
                     </div>
                     <div className="text-[11.5px] text-ink-2">
+                      {"roi_ladder" in l.strategy && (
+                        <>
+                          <span className="pixel text-[12px] text-ink">{protectedPct(l)}%</span> protected ·{" "}
+                        </>
+                      )}
                       {Object.keys(l.strategy)[0].replace("_", " ")} · {done}/{l.tranches.length} tranches claimed{l.challenge_id ? ` · Challenge #${l.challenge_id}` : ""}
                     </div>
                   </div>

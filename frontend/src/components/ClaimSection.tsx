@@ -2,7 +2,9 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
-import { decodeResult, fmtDate, fmtDur, fromUnits, mult, nowTs, pct, view } from "../lib/near";
+import { countdown, decodeResult, fmtDate, fmtDur, fromUnits, mult, nowTs, pct, protectedPct, twap, view } from "../lib/near";
+import { fromTranches } from "../lib/ladder";
+import { Ladder, type RungStatus } from "./Ladder";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Condition, Lock, Tranche } from "../lib/types";
@@ -34,6 +36,25 @@ function trancheStatus(t: Tranche, lock: Lock, cooldown: number): { label: strin
   return { label: "not met", cls: "tag-muted" };
 }
 
+/** A ladder lock's tranches as the plain steps lib/ladder.ts expects. */
+function ladderSteps(lock: Lock): { fraction_bps: number; multiplier_bps: number }[] {
+  return lock.tranches.map((t) => {
+    const c = t.conditions.find((x) => "price_above" in x);
+    return { fraction_bps: t.fraction_bps, multiplier_bps: c && "price_above" in c ? c.price_above.multiplier_bps : 10000 };
+  });
+}
+
+/** Per-tranche status for the live ladder, in the order the brief sets. */
+function rungStatus(t: Tranche, lock: Lock, now: number): RungStatus {
+  if (t.claimed) return "claimed";
+  if (now >= lock.start_ts + lock.max_duration_sec) return "released";
+  if (t.ripe) return "ripe";
+  if (t.armed_at_ts !== null) return "armed";
+  return "waiting";
+}
+
+const isLadder = (lock: Lock) => "roi_ladder" in lock.strategy;
+
 function LockCard({ lock, highlight = false, highlightLabel = "just locked", onExit }: { lock: Lock; highlight?: boolean; highlightLabel?: string; onExit?: (lock: Lock) => void }) {
   const { meta, config, refresh, refreshUser, challenges } = useProtocol();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -54,6 +75,24 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
       .then(setClaimable)
       .catch(() => setClaimable(null));
   }, [lock]);
+
+  // Current price as a multiple of the lock's reference price, for the ladder marker.
+  const [progress, setProgress] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isLadder(lock) || lock.status !== "active" || !lock.reference_price || !config) {
+      setProgress(null);
+      return;
+    }
+    let live = true;
+    const ref = BigInt(lock.reference_price);
+    twap(lock.token, config.twap_window_sec).then((p) => {
+      if (!live) return;
+      setProgress(p === null || ref === 0n ? null : Number((p * 1_000_000n) / ref) / 1_000_000);
+    });
+    return () => {
+      live = false;
+    };
+  }, [lock, config]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -86,6 +125,20 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
             Lock #{lock.id}
             {highlight && <span className={`ml-2 tag ${highlightLabel === "just exited" ? "tag-muted" : "tag-ok"}`}>{highlightLabel}</span>} · {fmtDate(lock.start_ts)}
           </div>
+          {isLadder(lock) && lock.status === "active" ? (
+            <>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="pixel text-[24px]">{fromUnits(remaining, tm.decimals, 0)}</span>
+                <span className="text-[12px] text-ink-2">{tm.symbol} locked</span>
+                <span className="text-[12px] text-ink">
+                  · <span className="pixel text-[15px]">{protectedPct(lock)}%</span> protected
+                </span>
+              </div>
+              <div className="mt-1 text-[11.5px] text-ink-2">
+                Safety release on {fmtDate(lock.start_ts + lock.max_duration_sec)} · {countdown(lock.start_ts + lock.max_duration_sec)}
+              </div>
+            </>
+          ) : (
           <div className="mt-1 flex items-baseline gap-2">
             <span className="pixel text-[24px]">{fromUnits(remaining, tm.decimals, 0)}</span>
             <span className="text-[12px] text-ink-2">
@@ -93,6 +146,7 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
               {lock.status === "exited" ? `${tm.symbol} paid as penalty on ${fromUnits(lock.amount, tm.decimals, 0)}` : `${tm.symbol} remaining of ${fromUnits(lock.amount, tm.decimals, 0)}`}
             </span>
           </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-1.5">
           <span className={`tag ${lock.status === "active" ? "tag-live" : "tag-muted"}`}>{lock.status}</span>
@@ -105,6 +159,43 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
         </div>
       </div>
 
+      {isLadder(lock) && lock.status === "active" ? (
+        <div className="mt-4 border-y border-line py-4">
+          <Ladder
+            mode="live"
+            rungs={fromTranches(ladderSteps(lock))}
+            total={BigInt(lock.amount)}
+            decimals={tm.decimals}
+            symbol={tm.symbol}
+            status={lock.tranches.map((t) => rungStatus(t, lock, nowTs()))}
+            progressMultiple={progress}
+          />
+          {lock.tranches.some((t) => !t.claimed && !t.ripe && t.conditions.some((c) => "price_above" in c)) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {lock.tranches.map((t, i) => {
+                const c = t.conditions.find((x) => "price_above" in x);
+                if (!c || !("price_above" in c) || t.claimed || t.ripe) return null;
+                return (
+                  <button
+                    key={i}
+                    className="btn btn-outline btn-sm"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      run(`check${i}`, async () => {
+                        const out = await call(CONFIG.contracts.vault, "check_unlock", { lock_id: lock.id, tranche_idx: i }, CONFIG.gas.call);
+                        const v = decodeResult<string>(out);
+                        if (v) toast(`Rung ${i + 1}: ${v.replace("_", " ")}`, v === "ripe" ? "ok" : "info");
+                      })
+                    }
+                  >
+                    <Busy on={busy === `check${i}`}>check_unlock · {mult(c.price_above.multiplier_bps)}</Busy>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
       <ul className="mt-4 flex flex-col divide-y divide-line border-y border-line">
         {lock.tranches.map((t, i) => {
           const st = trancheStatus(t, lock, cooldown);
@@ -133,6 +224,11 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
           );
         })}
       </ul>
+      )}
+
+      {isLadder(lock) && lock.status === "active" && (
+        <p className="mt-3 text-[12px] text-ink-2">On {fmtDate(lock.start_ts + lock.max_duration_sec)}, everything still locked releases automatically, regardless of price.</p>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {lock.status === "active" && (
