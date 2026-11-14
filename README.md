@@ -95,7 +95,7 @@ NEAR is not a side feature in CEASER; it is what gives every action weight.
 | **Price of a voice** | Every Floor or community post and reply costs 0.01 NEAR, paid to the protocol treasury; each post links its fee transaction | the app, which verifies the transfer on chain before publishing |
 | **Backing tiers** | NEAR held plus staked sets your tier: Holder (1), Backer (10), Patron (100), Whale (1,000) | the app, from on-chain balances |
 | **Right to post** | Posting needs at least 1 NEAR in the account | the app |
-| **Right to launch** | Starting a campaign needs 2 NEAR plus 1 NEAR per 1M tokens of target (capped at 50); creating a community needs 10 NEAR; announcements need 25 NEAR held | the app |
+| **Right to launch** | Starting a campaign needs 2 NEAR plus 1 NEAR per 1M tokens of target (capped at 50); creating a community needs 5 NEAR; announcements need 25 NEAR held | the app |
 | **Community strength** | Communities rank by the NEAR backing of their active lockers, next to committed volume | derived from on-chain balances |
 
 Memecoin activity becomes NEAR demand: to hold, speak, lead or launch on CEASER you hold, stake or spend NEAR.

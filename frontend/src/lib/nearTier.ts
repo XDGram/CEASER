@@ -15,7 +15,7 @@ import { fromUnits, view } from "./near";
 
 export const YOCTO = 10n ** 24n;
 /** Creating a community needs this much backing. */
-export const COMMUNITY_REQUIREMENT = 10n * YOCTO;
+export const COMMUNITY_REQUIREMENT = 5n * YOCTO;
 /** Shown wherever a gate is enforced here rather than by a contract. */
 export const GATE_NOTE = "Checked in the app from on-chain balances.";
 
@@ -35,8 +35,8 @@ export interface Tier {
 
 export const TIERS: Tier[] = [
   { name: "Visitor", min: 0, unlocks: "Read everything, lock tokens, claim and exit" },
-  { name: "Holder", min: 1, unlocks: "Post on the Floor" },
-  { name: "Backer", min: 10, unlocks: "Create a community" },
+  { name: "Holder", min: 1, unlocks: "Post on the Floor, start small campaigns, create a community" },
+  { name: "Backer", min: 10, unlocks: "Larger campaigns" },
   { name: "Patron", min: 100, unlocks: "Post community announcements" },
   { name: "Whale", min: 1000, unlocks: "Everything, including the largest campaigns" },
 ];
@@ -46,7 +46,7 @@ export const POWERS: { label: string; needs: string; note?: string }[] = [
   { label: "Lock, claim and exit", needs: "No NEAR needed" },
   { label: "Post on the Floor", needs: "1 Ⓝ" },
   { label: "Start a campaign", needs: "2 Ⓝ", note: "plus 1 Ⓝ per 1,000,000 tokens of threshold, up to 50 Ⓝ" },
-  { label: "Create a community", needs: "10 Ⓝ" },
+  { label: "Create a community", needs: "5 Ⓝ" },
   { label: "Post an announcement", needs: "25 Ⓝ" },
   { label: "Reward boost", needs: "Staked NEAR only", note: "read by the vault from the whitelisted pool, not from your wallet balance" },
 ];
