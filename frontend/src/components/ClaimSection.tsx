@@ -2,7 +2,9 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CONFIG } from "../config";
-import { decodeResult, fmtDate, fmtDur, fromUnits, mult, nowTs, pct, view } from "../lib/near";
+import { countdown, decodeResult, fmtDate, fmtDur, fromUnits, mult, nowTs, pct, protectedPct, twap, view } from "../lib/near";
+import { Ladder } from "./Ladder";
+import { fromTranches } from "../lib/ladder";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Condition, Lock, Tranche } from "../lib/types";
@@ -47,6 +49,21 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
   const cooldown = config?.cooldown_sec ?? 600;
   const challenge = lock.challenge_id ? challenges.find((c) => c.id === lock.challenge_id) : undefined;
   const remaining = BigInt(lock.amount) - BigInt(lock.claimed_amount);
+  const isLadder = "roi_ladder" in lock.strategy;
+  const releaseTs = lock.start_ts + lock.max_duration_sec;
+  const [progressMultiple, setProgressMultiple] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isLadder || !lock.reference_price || lock.status !== "active") return;
+    twap(lock.token, config?.twap_window_sec ?? 1800).then((p) => {
+      const ref = Number(BigInt(lock.reference_price!));
+      setProgressMultiple(p !== null && ref > 0 ? Number(p) / ref : null);
+    });
+  }, [isLadder, lock, config]);
+  const multipleBps = (t: Tranche) => t.conditions.reduce((m, c) => ("price_above" in c ? c.price_above.multiplier_bps : m), 10000);
+  const ladderRungs = fromTranches(lock.tranches.map((t) => ({ fraction_bps: t.fraction_bps, multiplier_bps: multipleBps(t) })));
+  const ladderStatus = lock.tranches.map((t) =>
+    t.claimed ? ("claimed" as const) : nowTs() >= releaseTs ? ("released" as const) : t.ripe ? ("ripe" as const) : t.armed_at_ts ? ("armed" as const) : ("waiting" as const),
+  );
 
   useEffect(() => {
     if (lock.status !== "active") return;
@@ -105,6 +122,48 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
         </div>
       </div>
 
+      {isLadder ? (
+        <div className="mt-4 border-t border-line pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-[12px]">
+            <span className="text-ink">
+              <span className="pixel text-[18px]">{protectedPct(lock)}%</span> <span className="text-ink-2">still protected</span>
+            </span>
+            {lock.status === "active" && (
+              <span className="text-ink-2">
+                Safety release {fmtDate(releaseTs)} · {countdown(releaseTs)}
+              </span>
+            )}
+          </div>
+          <div className="mt-3">
+            <Ladder mode="live" rungs={ladderRungs} total={BigInt(lock.amount)} decimals={tm.decimals} symbol={tm.symbol} status={ladderStatus} progressMultiple={progressMultiple} />
+          </div>
+          {lock.status === "active" && (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {lock.tranches.map((t, i) =>
+                  !t.claimed && !t.ripe && nowTs() < releaseTs ? (
+                <button
+                  key={i}
+                  className="btn btn-outline btn-sm"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    run(`check${i}`, async () => {
+                      const out = await call(CONFIG.contracts.vault, "check_unlock", { lock_id: lock.id, tranche_idx: i }, CONFIG.gas.call);
+                      const v = decodeResult<string>(out);
+                      if (v) toast(`Rung ${i + 1}: ${v.replace("_", " ")}`, v === "ripe" ? "ok" : "info");
+                    })
+                  }
+                >
+                  <Busy on={busy === `check${i}`}>Check {String(multipleBps(t) / 10000)}x</Busy>
+                </button>
+                  ) : null,
+                )}
+              </div>
+              <p className="mt-3 text-[12px] text-ink-2">On {fmtDate(releaseTs)}, everything still locked releases automatically, regardless of price.</p>
+            </>
+          )}
+        </div>
+      ) : (
       <ul className="mt-4 flex flex-col divide-y divide-line border-y border-line">
         {lock.tranches.map((t, i) => {
           const st = trancheStatus(t, lock, cooldown);
@@ -133,6 +192,7 @@ function LockCard({ lock, highlight = false, highlightLabel = "just locked", onE
           );
         })}
       </ul>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {lock.status === "active" && (

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { CONFIG } from "../../config";
 import { countdown, fromUnits, mult, nowTs } from "../../lib/near";
+import { protectedPct } from "../../lib/near";
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import { RewardEstimate } from "../../components/RewardEstimate";
@@ -128,7 +129,7 @@ export function Overview() {
                       Lock #{l.id} · {fromUnits(BigInt(l.amount) - BigInt(l.claimed_amount), m.decimals, 0)} {m.symbol}
                     </div>
                     <div className="text-[11.5px] text-ink-2">
-                      {Object.keys(l.strategy)[0].replace("_", " ")} · {done}/{l.tranches.length} tranches claimed{l.challenge_id ? ` · Challenge #${l.challenge_id}` : ""}
+                      {Object.keys(l.strategy)[0].replace("_", " ")} · {done}/{l.tranches.length} tranches claimed{"roi_ladder" in l.strategy ? ` · ${protectedPct(l)}% protected` : ""}{l.challenge_id ? ` · Challenge #${l.challenge_id}` : ""}
                     </div>
                   </div>
                   {claimableLocks.includes(l) ? <span className="tag tag-ok">claimable</span> : <span className="tag tag-muted">locked</span>}
