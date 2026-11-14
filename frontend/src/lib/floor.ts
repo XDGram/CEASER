@@ -10,7 +10,7 @@ import type { Challenge, Lock } from "./types";
 
 export const supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey);
 
-export type PostKind = "thesis" | "confession" | "pledge" | "receipt";
+export type PostKind = "thesis" | "confession" | "pledge" | "receipt" | "announcement" | "update";
 
 export interface FloorPost {
   id: string;
@@ -22,6 +22,13 @@ export interface FloorPost {
   lock_id: number | null;
   parent_id: string | null;
   meta: Record<string, unknown>;
+  community_id: string | null;
+  /**
+   * An announcement whose author leads its community: the community creator or
+   * the creator of one of its campaigns. Checked here in the app, because the
+   * feed database is open on this testnet demo.
+   */
+  leader: boolean;
   diamonds: number;
   copes: number;
   myReaction: "diamond" | "cope" | null;
@@ -33,7 +40,14 @@ export interface FloorPost {
 export interface FeedFilter {
   kind?: PostKind;
   challengeId?: number;
+  /** Posts tagged with the community, or with any of its campaigns, in one query. */
+  community?: { id: string; challengeIds: number[] };
+  /** Mix in receipts derived from vault state. Default true. */
+  derived?: boolean;
 }
+
+/** True for seeded demonstration posts, which the UI labels "Demo". */
+export const isDemo = (p: { meta: Record<string, unknown> }) => p.meta?.demo === true;
 
 interface PostRow {
   id: string;
@@ -45,6 +59,7 @@ interface PostRow {
   lock_id: number | null;
   parent_id: string | null;
   meta: Record<string, unknown> | null;
+  community_id?: string | null;
 }
 
 interface StatRow {
@@ -71,7 +86,7 @@ export function deriveReceipts(locks: Lock[], challenges: Challenge[], skipLockI
     return c ? `"${c.title}"` : id ? `Challenge #${id}` : null;
   };
   for (const l of locks) {
-    const base = { author: l.owner, parent_id: null, meta: {}, diamonds: 0, copes: 0, myReaction: null, replies: [], derived: true };
+    const base = { author: l.owner, parent_id: null, meta: {}, community_id: null, leader: false, diamonds: 0, copes: 0, myReaction: null, replies: [], derived: true };
     if (!skipLockIds.has(l.id)) {
       const where = l.challenge_id ? `joined ${title(l.challenge_id)} with ${amt(l.amount)} ${sym()}` : `locked ${amt(l.amount)} ${sym()} behind a ladder`;
       out.push({ ...base, id: `derived-pledge-${l.id}`, created_at: new Date(l.start_ts * 1000).toISOString(), kind: "pledge", body: where, challenge_id: l.challenge_id, lock_id: l.id });
@@ -105,6 +120,12 @@ export async function loadFeed(filter: FeedFilter, viewer: string | null, challe
   let q = supabase.from("posts").select("*").is("parent_id", null).order("created_at", { ascending: false }).limit(limit);
   if (filter.kind) q = q.eq("kind", filter.kind);
   if (filter.challengeId !== undefined) q = q.eq("challenge_id", filter.challengeId);
+  if (filter.community) {
+    const ors = [`community_id.eq.${filter.community.id}`];
+    const ids = filter.community.challengeIds.filter((n) => Number.isInteger(n));
+    if (ids.length) ors.push(`challenge_id.in.(${ids.join(",")})`);
+    q = q.or(ors.join(","));
+  }
 
   const lockCount = await view<number>(CONFIG.contracts.vault, "get_lock_count").catch(() => 0);
   const [{ data: top, error }, { data: profileRows }, locks] = await Promise.all([
@@ -137,6 +158,9 @@ export async function loadFeed(filter: FeedFilter, viewer: string | null, challe
   let derived = deriveReceipts(locks, challenges, storedLockIds);
   if (filter.kind) derived = derived.filter((d) => d.kind === filter.kind);
   if (filter.challengeId !== undefined) derived = derived.filter((d) => d.challenge_id === filter.challengeId);
+  if (filter.community) derived = derived.filter((d) => d.challenge_id !== null && filter.community!.challengeIds.includes(d.challenge_id));
+  if (filter.derived === false) derived = [];
+  await markLeaders(posts, challenges);
 
   const merged = [...posts, ...derived].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
   const names = Object.fromEntries(((profileRows ?? []) as { account: string; display_name: string }[]).map((p) => [p.account, p.display_name]));
@@ -151,6 +175,8 @@ function decorator(statRows: unknown, mine: unknown): (r: PostRow) => FloorPost 
   return (r: PostRow): FloorPost => ({
     ...r,
     meta: r.meta ?? {},
+    community_id: r.community_id ?? null,
+    leader: false,
     diamonds: stats.get(r.id)?.diamonds ?? 0,
     copes: stats.get(r.id)?.copes ?? 0,
     myReaction: myMap.get(r.id) ?? null,
@@ -196,11 +222,13 @@ export async function loadAuthorPosts(author: string, viewer: string | null): Pr
   return own.map((r) => ({ ...decorate(r), replies: r.parent_id === null ? (byParent.get(r.id) ?? []) : [] }));
 }
 
-export async function createPost(p: { author: string; kind: PostKind; body: string; challenge_id?: number | null; lock_id?: number | null; parent_id?: string | null }): Promise<void> {
+export async function createPost(p: { author: string; kind: PostKind; body: string; challenge_id?: number | null; lock_id?: number | null; parent_id?: string | null; community_id?: string | null }): Promise<void> {
   const body = p.body.trim();
   if (!body) throw new Error("Write something first");
   if (body.length > 600) throw new Error("At most 600 characters");
-  const { error } = await supabase.from("posts").insert({ author: p.author, kind: p.kind, body, challenge_id: p.challenge_id ?? null, lock_id: p.lock_id ?? null, parent_id: p.parent_id ?? null });
+  const { error } = await supabase
+    .from("posts")
+    .insert({ author: p.author, kind: p.kind, body, challenge_id: p.challenge_id ?? null, lock_id: p.lock_id ?? null, parent_id: p.parent_id ?? null, community_id: p.community_id ?? null });
   if (error) throw new Error(error.message);
 }
 
@@ -253,4 +281,23 @@ export function convictionWeight(locks: Lock[]): Map<string, bigint> {
     map.set(l.owner, (map.get(l.owner) ?? 0n) + w);
   }
   return map;
+}
+
+/**
+ * Marks announcements written by a leader of their community. Leaders are the
+ * community creator and the creators of its campaigns (vault Challenges). The
+ * communities table is read directly here, not through lib/community.ts, which
+ * itself imports this module.
+ */
+async function markLeaders(posts: FloorPost[], challenges: Challenge[]): Promise<void> {
+  const ids = [...new Set(posts.filter((p) => p.kind === "announcement" && p.community_id).map((p) => p.community_id as string))];
+  if (!ids.length) return;
+  const { data } = await supabase.from("communities").select("id,creator,challenge_ids").in("id", ids);
+  const leaders = new Map<string, Set<string>>();
+  for (const c of (data ?? []) as { id: string; creator: string; challenge_ids: number[] }[]) {
+    const set = new Set<string>([c.creator]);
+    for (const ch of challenges) if (c.challenge_ids.includes(ch.id)) set.add(ch.creator);
+    leaders.set(c.id, set);
+  }
+  for (const p of posts) if (p.kind === "announcement" && p.community_id) p.leader = leaders.get(p.community_id)?.has(p.author) ?? false;
 }

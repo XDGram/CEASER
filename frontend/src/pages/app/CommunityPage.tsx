@@ -1,16 +1,17 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CONFIG } from "../../config";
-import { fetchAllLocks, fmtDate, fromUnits, short } from "../../lib/near";
+import { fetchAllLocks, fmtDate, fromUnits, short, timeAgo } from "../../lib/near";
+import { recentActivity, useLiveActivity, type ActivityEvent } from "../../lib/live";
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import { computeCommunityStats, loadCommunity, lockChallenge, type Community, type CommunityStats } from "../../lib/community";
-import { convictionByOwner, loadFeed, type FeedData, type FloorPost } from "../../lib/floor";
+import { convictionByOwner, isDemo, loadFeed, type FeedData, type PostKind } from "../../lib/floor";
 import { profilePath } from "../../lib/profile";
 import type { Challenge, Lock } from "../../lib/types";
 import { Pfp } from "../../components/Pfp";
-import { PostCard, useAutoRefresh } from "../../components/FloorFeed";
+import { Composer, PostCard, useAutoRefresh } from "../../components/FloorFeed";
 import { RewardEstimate } from "../../components/RewardEstimate";
 
 /**
@@ -46,6 +47,28 @@ export function CommunityPage() {
       .catch(() => setLocks([]));
   }, [lockCount]);
 
+  // The conversation feed lives here so the header's weekly activity and the
+  // Conversation tab read the same posts.
+  const [feed, setFeed] = useState<FeedData | null>(null);
+  const [feedFailed, setFeedFailed] = useState(false);
+  const loadConversation = useCallback(async () => {
+    if (!community) return;
+    try {
+      setFeed(await loadFeed({ community: { id: community.id, challengeIds: community.challenge_ids }, derived: false }, accountId, challenges, 50));
+      setFeedFailed(false);
+    } catch {
+      setFeedFailed(true);
+    }
+  }, [community, accountId, challenges]);
+  useEffect(() => {
+    loadConversation();
+  }, [loadConversation]);
+  useAutoRefresh(loadConversation);
+
+  const [params, setParams] = useSearchParams();
+  const tab = (TABS.find((t) => t.key === params.get("tab"))?.key ?? "conversation") as TabKey;
+  const setTab = (k: TabKey) => setParams(k === "conversation" ? {} : { tab: k }, { replace: true });
+
   const campaigns = useMemo(
     () => (community ? challenges.filter((c) => community.challenge_ids.includes(c.id)).sort((a, b) => b.id - a.id) : []),
     [community, challenges],
@@ -64,6 +87,9 @@ export function CommunityPage() {
       toast(url, "info");
     }
   };
+
+  // Leaders: the community creator and the creators of its campaigns.
+  const isLeader = !!accountId && !!community && (accountId === community.creator || campaigns.some((c) => c.creator === accountId));
 
   if (community === null || failed)
     return (
@@ -125,22 +151,172 @@ export function CommunityPage() {
         </div>
       </div>
 
+      <SocialProof community={community} campaigns={campaigns} locks={locks} stats={stats} feed={feed} decimals={tm.decimals} symbol={tm.symbol} />
+
       <StatStrip stats={stats} symbol={tm.symbol} decimals={tm.decimals} />
 
-      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
-        <div className="flex flex-col gap-5 min-w-0">
-          <Milestones stats={stats} symbol={tm.symbol} decimals={tm.decimals} />
-          <Campaigns community={community} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} />
-          <Distribution campaigns={campaigns} locks={locks} meta={meta} />
-          <CommunityFloor ids={community.challenge_ids} challenges={challenges} viewer={accountId} />
-        </div>
+      <div className="mt-8 flex items-center gap-1 overflow-x-auto border-b border-line pb-3" role="tablist" aria-label="Community sections">
+        {TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} className={`px-3.5 py-1.5 rounded-full text-[13px] whitespace-nowrap shrink-0 transition ${tab === t.key ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex flex-col gap-5">
-          <Treasury stats={stats} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} />
-          <Growth stats={stats} />
-        </div>
+      <div className="mt-6">
+        {tab === "conversation" && (
+          <Conversation community={community} feed={feed} failed={feedFailed} reload={loadConversation} isLeader={isLeader} />
+        )}
+        {tab === "live" && <LiveTab communityId={community.id} />}
+        {tab === "campaigns" && (
+          <div className="flex flex-col gap-5">
+            <Milestones stats={stats} symbol={tm.symbol} decimals={tm.decimals} />
+            <Campaigns community={community} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} />
+            <Distribution campaigns={campaigns} locks={locks} meta={meta} />
+          </div>
+        )}
+        {tab === "treasury" && (
+          <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2 gap-5 items-start">
+            <Treasury stats={stats} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} />
+            <Growth stats={stats} />
+          </div>
+        )}
       </div>
     </section>
+  );
+}
+
+const TABS = [
+  { key: "conversation", label: "Conversation" },
+  { key: "live", label: "Live" },
+  { key: "campaigns", label: "Campaigns" },
+  { key: "treasury", label: "Treasury" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+const WEEK = 7 * 86400;
+
+/** Locks attributed to this community's campaigns, on-chain only. */
+function communityLocks(community: Community, locks: Lock[] | null): Lock[] {
+  if (!locks) return [];
+  return locks.filter((l) => {
+    const cid = lockChallenge(l);
+    return cid !== null && community.challenge_ids.includes(cid);
+  });
+}
+
+/**
+ * Who is here, from real data only: on-chain locks, and Floor posts that are
+ * not seeded demo content. Achievements are states, never dated, because the
+ * vault does not record when a milestone was crossed or a pool paid out.
+ */
+function SocialProof({ community, campaigns, locks, stats, feed, decimals, symbol }: { community: Community; campaigns: Challenge[]; locks: Lock[] | null; stats: CommunityStats | null; feed: FeedData | null; decimals: number; symbol: string }) {
+  const own = communityLocks(community, locks);
+  const now = Math.floor(Date.now() / 1000);
+  const active = own.filter((l) => l.status === "active");
+  const holding = new Set(active.map((l) => l.owner)).size;
+  // Latest real lockers first, one avatar per account.
+  const members: string[] = [];
+  for (const l of [...own].sort((a, b) => b.start_ts - a.start_ts)) if (!members.includes(l.owner)) members.push(l.owner);
+  const fresh = own.filter((l) => now - l.start_ts < WEEK);
+  const joined = new Set(fresh.map((l) => l.owner)).size;
+  const posters = (feed?.posts ?? []).flatMap((p) => [p, ...p.replies]).filter((p) => !isDemo(p) && !p.derived && now - Math.floor(new Date(p.created_at).getTime() / 1000) < WEEK);
+  const activeWeek = new Set([...fresh.map((l) => l.owner), ...posters.map((p) => p.author)]).size;
+
+  const achievements: string[] = [];
+  for (const m of stats?.milestones ?? []) if (m.reached) achievements.push(`${fromUnits(m.target, decimals, 0)} ${symbol} committed`);
+  for (const c of campaigns) if (c.state === "succeeded") achievements.push(`Campaign #${c.id} succeeded`);
+  for (const c of campaigns) {
+    if (c.state === "active") continue;
+    const paid = own.some((l) => lockChallenge(l) === c.id && l.reward_claimed && BigInt(l.conviction) > 0n);
+    if (paid) achievements.push(`Campaign #${c.id} pool paid out`);
+  }
+
+  const loading = locks === null;
+  return (
+    <div className="mt-5 card p-5 sm:p-6">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+        <div className="flex items-center">
+          {members.slice(0, 8).map((m, i) => (
+            <Link key={m} to={profilePath(m)} title={m} className={`rounded-md ring-2 ring-surface ${i ? "-ml-2" : ""}`} style={{ zIndex: 8 - i }}>
+              <Pfp id={m} size={30} />
+            </Link>
+          ))}
+          {!loading && !members.length && <span className="text-[12.5px] text-ink-2">No lockers yet</span>}
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[12.5px] text-ink-2">
+          <span>
+            <span className="pixel text-[16px] text-ink">{loading ? "…" : holding}</span> member{holding === 1 ? "" : "s"} holding
+          </span>
+          <span>
+            <span className="pixel text-[16px] text-ink">{loading ? "…" : joined}</span> joined this week
+          </span>
+          <span title="Accounts that locked or posted in the last 7 days. Demo posts are not counted.">
+            <span className="pixel text-[16px] text-ink">{loading || !feed ? "…" : activeWeek}</span> active this week
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 border-t border-line pt-3 flex flex-wrap items-center gap-2">
+        <span className="text-[10.5px] font-mono uppercase tracking-[0.12em] text-ink-3 mr-1">Recent achievements</span>
+        {achievements.map((a) => (
+          <span key={a} className="tag tag-ok">
+            {a}
+          </span>
+        ))}
+        {stats && !achievements.length && <span className="text-[12px] text-ink-3">None yet. The first milestone is the next one.</span>}
+      </div>
+    </div>
+  );
+}
+
+function Conversation({ community, feed, failed, reload, isLeader }: { community: Community; feed: FeedData | null; failed: boolean; reload: () => void; isLeader: boolean }) {
+  const conviction = useMemo(() => convictionByOwner(feed?.locks ?? []), [feed]);
+  const posts = feed?.posts ?? [];
+  // Only announcements by a verified leader are pinned; anything else typed as
+  // an announcement stays in the feed as an ordinary post.
+  const pinned = posts.filter((p) => p.kind === "announcement" && p.leader);
+  const rest = posts.filter((p) => !pinned.includes(p));
+  const now = Date.now();
+  const hot = posts
+    .filter((p) => now - new Date(p.created_at).getTime() < WEEK * 1000)
+    .map((p) => ({ p, score: p.replies.length + p.diamonds + p.copes }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const kinds: PostKind[] = isLeader ? ["thesis", "confession", "update", "announcement"] : ["thesis", "confession", "update"];
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_320px] gap-5 items-start">
+      <div className="flex flex-col gap-4 min-w-0">
+        {pinned.map((p) => (
+          <PostCard key={p.id} post={p} names={feed!.names} conviction={conviction.get(p.author)} onChanged={reload} pinned />
+        ))}
+        <Composer communityId={community.id} kinds={kinds} onPosted={reload} note="Leader posts are checked in the app; the feed database is open on this testnet demo." />
+        {failed && <div className="card p-5 text-[13px] text-bad">The conversation is not reachable right now. It retries every 30 seconds.</div>}
+        {!failed && feed === null && <div className="card p-5 text-[13px] text-ink-2">Reading the conversation…</div>}
+        {feed && !posts.length && <div className="card p-5 text-[13px] text-ink-2">Nobody has posted here yet. Start the conversation.</div>}
+        {feed && rest.map((p) => <PostCard key={p.id} post={p} names={feed.names} conviction={conviction.get(p.author)} onChanged={reload} />)}
+      </div>
+      <aside className="card p-5">
+        <h2 className="text-[16px] tracking-tight">Most discussed this week</h2>
+        <p className="mt-0.5 text-[11.5px] text-ink-2">Replies plus reactions, last 7 days.</p>
+        <ol className="mt-3 flex flex-col divide-y divide-line">
+          {hot.map(({ p, score }, i) => (
+            <li key={p.id} className="py-2.5 flex items-start gap-2.5">
+              <span className="pixel text-[12px] text-ink-3 w-3 shrink-0">{i + 1}</span>
+              <Pfp id={p.author} size={22} />
+              <div className="min-w-0">
+                <p className="text-[12.5px] text-ink leading-snug line-clamp-2 break-words">{p.body}</p>
+                <div className="mt-0.5 text-[10.5px] text-ink-3">
+                  {feed?.names[p.author] ?? short(p.author, 18)} · <span className="pixel text-[11px]">{score}</span> interactions
+                </div>
+              </div>
+            </li>
+          ))}
+          {feed && !hot.length && <li className="py-2 text-[12px] text-ink-2">No threads with replies or reactions this week.</li>}
+        </ol>
+      </aside>
+    </div>
   );
 }
 
@@ -428,53 +604,84 @@ function Growth({ stats }: { stats: CommunityStats | null }) {
   );
 }
 
-function CommunityFloor({ ids, challenges, viewer }: { ids: number[]; challenges: Challenge[]; viewer: string | null }) {
-  const [data, setData] = useState<FeedData | null>(null);
+/**
+ * Activity timeline: dated events from recentActivity, merged with changes
+ * useLiveActivity detects while the page is open. Live events can lack a
+ * time (exits, claims and sponsor deposits are not timestamped on-chain), so
+ * they show a "Live" tag instead of a date and sit above the dated history.
+ */
+function LiveTab({ communityId }: { communityId: string }) {
+  const [history, setHistory] = useState<ActivityEvent[] | null>(null);
   const [failed, setFailed] = useState(false);
-
-  const reload = useCallback(async () => {
-    if (!ids.length) return setData({ posts: [], names: {}, locks: [] });
+  const { events } = useLiveActivity({ communityId });
+  const load = useCallback(async () => {
     try {
-      // loadFeed filters to one Challenge, so each campaign is fetched and merged.
-      const parts = await Promise.all(ids.map((cid) => loadFeed({ challengeId: cid }, viewer, challenges, 20)));
-      const seen = new Set<string>();
-      const posts: FloorPost[] = [];
-      for (const p of parts.flatMap((x) => x.posts)) {
-        if (seen.has(p.id)) continue;
-        seen.add(p.id);
-        posts.push(p);
-      }
-      posts.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-      setData({
-        posts: posts.slice(0, 20),
-        names: Object.assign({}, ...parts.map((x) => x.names)),
-        locks: parts[0]?.locks ?? [],
-      });
+      setHistory(await recentActivity({ communityId, limit: 60 }));
       setFailed(false);
     } catch {
       setFailed(true);
     }
-  }, [ids, challenges, viewer]);
-
+  }, [communityId]);
   useEffect(() => {
-    reload();
-  }, [reload]);
-  useAutoRefresh(reload);
+    load();
+  }, [load]);
+  useAutoRefresh(load);
 
-  const conviction = useMemo(() => convictionByOwner(data?.locks ?? []), [data]);
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ActivityEvent[] = [];
+    for (const e of [...events, ...(history ?? [])]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out.sort((a, b) => Number(b.live) - Number(a.live) || (b.at ?? 0) - (a.at ?? 0));
+  }, [events, history]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-baseline justify-between gap-3 border-b border-line pb-2">
-        <h2 className="text-[17px] tracking-tight">Floor</h2>
-        <Link to="/app/community" className="text-[12px] text-ink-2 hover:text-ink">
-          The Floor →
-        </Link>
+    <div className="card p-5 sm:p-6">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 className="text-[17px] tracking-tight">Live</h2>
+        <span className="text-[11.5px] text-ink-3">Locks, posts and reactions, newest first. Live rows were detected while this page was open.</span>
       </div>
-      {failed && <div className="card p-5 text-[13px] text-bad">The Floor is not reachable right now. It retries every 30 seconds.</div>}
-      {!failed && data === null && <div className="card p-5 text-[13px] text-ink-2">Reading the floor…</div>}
-      {data && data.posts.length === 0 && <div className="card p-5 text-[13px] text-ink-2">Nothing posted in this community's campaigns yet.</div>}
-      {data && data.posts.map((p) => <PostCard key={p.id} post={p} names={data.names} conviction={conviction.get(p.author)} onChanged={reload} />)}
+      {failed && <p className="mt-4 text-[13px] text-bad">Activity is not reachable right now. It retries every 30 seconds.</p>}
+      {!failed && history === null && <p className="mt-4 text-[13px] text-ink-2">Reading activity…</p>}
+      {history && !rows.length && <p className="mt-4 text-[13px] text-ink-2">No activity recorded for this community yet.</p>}
+      <ol className="mt-3 divide-y divide-line">
+        {rows.map((e) => {
+          const inner = (
+            <>
+              {e.account ? <Pfp id={e.account} size={26} /> : <span className="h-[26px] w-[26px] shrink-0 rounded-md bg-paper-2" />}
+              <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink break-words">{e.text}</span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                {e.demo && (
+                  <span className="pill !px-1.5 !py-0 !text-[9px] !tracking-[0.1em] !border-line text-ink-3" title="Seeded demonstration activity">
+                    Demo
+                  </span>
+                )}
+                {e.live && <span className="tag tag-live">Live</span>}
+                {e.at !== null && <span className="text-[11px] text-ink-3 whitespace-nowrap">{ago(e.at)}</span>}
+              </span>
+            </>
+          );
+          return (
+            <li key={e.id}>
+              {e.href ? (
+                <Link to={e.href} className="py-2.5 flex items-center gap-3 hover:bg-paper -mx-2 px-2 rounded-lg transition">
+                  {inner}
+                </Link>
+              ) : (
+                <div className="py-2.5 flex items-center gap-3">{inner}</div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
+}
+
+/** Relative time from unix seconds. */
+function ago(at: number): string {
+  return timeAgo(new Date(at * 1000).toISOString());
 }

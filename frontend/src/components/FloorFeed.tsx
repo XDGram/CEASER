@@ -3,7 +3,7 @@ import { Select } from "./Select";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fmtDur, fromUnits, short, timeAgo } from "../lib/near";
-import { createPost, toggleReaction, type ConvictionInfo, type FloorPost, type PostKind } from "../lib/floor";
+import { createPost, isDemo, toggleReaction, type ConvictionInfo, type FloorPost, type PostKind } from "../lib/floor";
 import { errorText, useWallet } from "../lib/wallet";
 import { Pfp } from "./Pfp";
 import { profilePath } from "../lib/profile";
@@ -46,8 +46,26 @@ export function CopeGlyph({ on }: { on: boolean }) {
 }
 
 export function KindTag({ kind }: { kind: PostKind }) {
-  const cls = kind === "thesis" ? "tag-live" : kind === "confession" ? "tag-bad" : kind === "pledge" ? "tag-ok" : "tag-muted";
+  const cls = kind === "thesis" || kind === "announcement" ? "tag-live" : kind === "confession" ? "tag-bad" : kind === "pledge" ? "tag-ok" : "tag-muted";
   return <span className={`tag ${cls}`}>{kind}</span>;
+}
+
+/** Seeded demonstration content. Real posts carry no label. */
+export function DemoTag() {
+  return (
+    <span className="pill !px-1.5 !py-0 !text-[9px] !tracking-[0.1em] !border-line text-ink-3" title="Seeded demonstration post">
+      Demo
+    </span>
+  );
+}
+
+/** An announcement by a verified leader of its community. */
+export function LeaderTag() {
+  return (
+    <span className="pill !px-1.5 !py-0 !text-[9px] !tracking-[0.1em] border-accent/50 text-accent-2" title="Community creator or campaign creator, checked in the app">
+      Leader
+    </span>
+  );
 }
 
 export function AccountLine({ account, names, conviction }: { account: string; names: Record<string, string>; conviction?: ConvictionInfo }) {
@@ -110,7 +128,7 @@ function Reactions({ post, onChanged }: { post: FloorPost; onChanged: () => void
   );
 }
 
-export function PostCard({ post, names, conviction, onChanged, showChallengeLink = true }: { post: FloorPost; names: Record<string, string>; conviction?: ConvictionInfo; onChanged: () => void; showChallengeLink?: boolean }) {
+export function PostCard({ post, names, conviction, onChanged, showChallengeLink = true, pinned = false }: { post: FloorPost; names: Record<string, string>; conviction?: ConvictionInfo; onChanged: () => void; showChallengeLink?: boolean; pinned?: boolean }) {
   const { accountId, toast } = useWallet();
   const [replying, setReplying] = useState(false);
   const [reply, setReply] = useState("");
@@ -120,7 +138,8 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
     if (!accountId) return toast("Connect a wallet to reply", "err");
     setBusy(true);
     try {
-      await createPost({ author: accountId, kind: post.kind, body: reply, parent_id: post.id, challenge_id: post.challenge_id });
+      // Replies to announcements are ordinary replies, not announcements.
+      await createPost({ author: accountId, kind: post.kind === "announcement" ? "update" : post.kind, body: reply, parent_id: post.id, challenge_id: post.challenge_id, community_id: post.community_id });
       setReply("");
       setReplying(false);
       onChanged();
@@ -132,7 +151,13 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
   };
 
   return (
-    <motion.article initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="card p-4 sm:p-5">
+    <motion.article initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className={`card relative overflow-hidden p-4 sm:p-5 ${pinned ? "pt-5 sm:pt-6" : ""}`}>
+      {pinned && (
+        <>
+          <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-accent" />
+          <div className="mb-3 text-[10.5px] font-mono uppercase tracking-[0.14em] text-accent-2">Pinned announcement</div>
+        </>
+      )}
       <div className="flex items-start gap-3">
         <Link to={profilePath(post.author)} className="shrink-0" title={post.author}>
           <Pfp id={post.author} size={34} />
@@ -141,6 +166,8 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <AccountLine account={post.author} names={names} conviction={conviction} />
             <span className="flex items-center gap-2 shrink-0">
+              {isDemo(post) && <DemoTag />}
+              {post.kind === "announcement" && post.leader && <LeaderTag />}
               <KindTag kind={post.kind} />
               <span className="text-[11px] text-ink-3">{timeAgo(post.created_at)}</span>
             </span>
@@ -173,6 +200,7 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
                         {names[r.author] ?? short(r.author, 22)}
                       </Link>
                       <span className="text-[10.5px] text-ink-3">{timeAgo(r.created_at)}</span>
+                      {isDemo(r) && <DemoTag />}
                     </div>
                     <p className="text-[13px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words">{r.body}</p>
                   </div>
@@ -195,9 +223,32 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
   );
 }
 
-export function Composer({ challengeId, challenges, onPosted, compact = false }: { challengeId?: number; challenges?: { id: number; title: string }[]; onPosted: () => void; compact?: boolean }) {
+const KIND_LABEL: Partial<Record<PostKind, string>> = { thesis: "Thesis", confession: "Confession", update: "Update", announcement: "Announcement" };
+
+export function Composer({
+  challengeId,
+  challenges,
+  onPosted,
+  compact = false,
+  communityId,
+  kinds = ["thesis", "confession"],
+  note,
+}: {
+  challengeId?: number;
+  challenges?: { id: number; title: string }[];
+  onPosted: () => void;
+  compact?: boolean;
+  /** Tags every post with this community. */
+  communityId?: string;
+  kinds?: PostKind[];
+  note?: string;
+}) {
   const { accountId, connect, toast } = useWallet();
-  const [kind, setKind] = useState<"thesis" | "confession">("thesis");
+  const [kind, setKind] = useState<PostKind>(kinds[0]);
+  // A kind that is no longer offered (the viewer changed) falls back to the first.
+  useEffect(() => {
+    if (!kinds.includes(kind)) setKind(kinds[0]);
+  }, [kinds, kind]);
   const [body, setBody] = useState("");
   const [target, setTarget] = useState<string>(challengeId !== undefined ? String(challengeId) : "");
   const [busy, setBusy] = useState(false);
@@ -206,7 +257,7 @@ export function Composer({ challengeId, challenges, onPosted, compact = false }:
     if (!accountId) return connect();
     setBusy(true);
     try {
-      await createPost({ author: accountId, kind, body, challenge_id: target ? parseInt(target, 10) : null });
+      await createPost({ author: accountId, kind, body, challenge_id: target ? parseInt(target, 10) : null, community_id: communityId ?? null });
       setBody("");
       onPosted();
       toast("Posted to the floor", "ok");
@@ -223,9 +274,9 @@ export function Composer({ challengeId, challenges, onPosted, compact = false }:
         {accountId && <Pfp id={accountId} size={34} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            {(["thesis", "confession"] as const).map((k) => (
-              <button key={k} className={`pill !normal-case !tracking-normal cursor-pointer ${kind === k ? "border-ink text-ink" : ""}`} onClick={() => setKind(k)}>
-                {k === "thesis" ? "Thesis" : "Confession"}
+            {kinds.map((k) => (
+              <button key={k} className={`pill !normal-case !tracking-normal cursor-pointer ${kind === k ? "border-ink text-ink" : ""} ${k === "announcement" ? "!border-accent/50 text-accent-2" : ""}`} onClick={() => setKind(k)}>
+                {KIND_LABEL[k] ?? k}
               </button>
             ))}
             {challengeId === undefined && challenges && (
@@ -235,7 +286,15 @@ export function Composer({ challengeId, challenges, onPosted, compact = false }:
           <textarea
             className="input mt-3 min-h-[76px] text-[13.5px]"
             maxLength={600}
-            placeholder={kind === "thesis" ? "Why this holds. Make the case." : "What you sold, when, and what it cost you."}
+            placeholder={
+              kind === "thesis"
+                ? "Why this holds. Make the case."
+                : kind === "confession"
+                  ? "What you sold, when, and what it cost you."
+                  : kind === "announcement"
+                    ? "What the community needs to know."
+                    : "Where things stand, and what comes next."
+            }
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
@@ -245,6 +304,7 @@ export function Composer({ challengeId, challenges, onPosted, compact = false }:
               <Busy on={busy}>{accountId ? "Post" : "Connect to post"}</Busy>
             </button>
           </div>
+          {note && <p className="mt-2 text-[11px] text-ink-3">{note}</p>}
         </div>
       </div>
     </div>
