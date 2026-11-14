@@ -97,10 +97,11 @@ export function Nav() {
             </a>
           ))}
         </nav>
-        <div className="flex items-center gap-5 justify-self-end">
-          <a href="https://github.com/XDGram/CEASER" target="_blank" rel="noopener" className="hidden sm:inline text-[12.5px] text-ink-2 hover:text-ink">
+        <div className="flex items-center gap-3 sm:gap-4 justify-self-end">
+          <a href="https://github.com/XDGram/CEASER" target="_blank" rel="noopener" className="hidden lg:inline text-[12.5px] text-ink-2 hover:text-ink">
             GitHub
           </a>
+          <DemoButton className="btn btn-outline btn-sm hidden sm:inline-flex" />
           <EnterButton />
         </div>
       </div>
