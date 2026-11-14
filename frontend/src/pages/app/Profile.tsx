@@ -102,15 +102,20 @@ export function Profile() {
 
   return (
     <section className="mx-auto max-w-[1180px] px-4 sm:px-6 pt-10">
-      <div className="card p-6 sm:p-8">
-        <div className="flex flex-wrap items-start gap-5 sm:gap-7">
-          <Pfp id={account} size={88} className="rounded-xl" />
+      <div className="card p-5 sm:p-8">
+        <div className="flex flex-wrap items-start gap-4 sm:gap-7">
+          <div className="sm:hidden">
+            <Pfp id={account} size={64} className="rounded-xl" />
+          </div>
+          <div className="hidden sm:block">
+            <Pfp id={account} size={88} className="rounded-xl" />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-ink-2">{isOwn ? "Your profile" : "Profile"}</div>
             <NameLine account={account} name={name} isOwn={isOwn} onSaved={(n) => setData((d) => (d ? { ...d, names: { ...d.names, [account]: n } } : d))} />
-            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-[11px] sm:text-[12px] text-ink-2 break-all">{account}</span>
-              <button className="pill cursor-pointer hover:border-ink hover:text-ink !normal-case !tracking-normal" onClick={copy} title="Copy account id">
+            <div className="mt-1.5 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span className="font-mono text-[10.5px] sm:text-[12px] text-ink-2 break-all">{account}</span>
+              <button className="pill cursor-pointer hover:border-ink hover:text-ink !normal-case !tracking-normal !px-2 sm:!px-2.5 text-[9.5px] sm:text-[10px]" onClick={copy} title="Copy account id">
                 {copied ? "copied" : "copy"}
               </button>
             </div>
@@ -120,25 +125,23 @@ export function Profile() {
                 boost {mult(boostBps)}
               </span>
               {rank && (
-                <span className="text-ink">
+                <span className="text-ink basis-full sm:basis-auto">
                   Top {rank.topPct}% of lockers by conviction <span className="text-ink-3">· #{rank.rank} of {rank.of}</span>
                 </span>
               )}
-              {!rank && data && <span className="text-ink-3">Unranked · no active lock</span>}
+              {!rank && data && <span className="text-ink-3 basis-full sm:basis-auto">Unranked · no active lock</span>}
             </div>
           </div>
-          <div className="flex gap-2">
-            {isOwn && (
-              <Link to="/app/lock" className="btn btn-accent btn-sm">
+          {isOwn && (
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Link to="/app/lock" className="btn btn-accent btn-sm flex-1 sm:flex-none justify-center">
                 Create a lock
               </Link>
-            )}
-            {isOwn && (
-              <Link to="/app/locks" className="btn btn-outline btn-sm">
+              <Link to="/app/locks" className="btn btn-outline btn-sm flex-1 sm:flex-none justify-center">
                 My locks
               </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {badges.length > 0 && (
@@ -156,7 +159,7 @@ export function Profile() {
 
       <StatsBand stats={stats} loading={loading} decimals={tm.decimals} symbol={tm.symbol} activeCount={locks.filter((l) => l.status === "active").length} exitedCount={locks.filter((l) => l.status === "exited").length} />
 
-      <div className="mt-8 flex items-center gap-1.5 flex-wrap border-b border-line pb-3">
+      <div className="mt-8 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-line pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
         {TABS.map((t) => (
           <button key={t} className={`px-3 py-1.5 rounded-full text-[12px] transition ${t === tab ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"}`} onClick={() => setTab(t)}>
             {t}
@@ -199,7 +202,7 @@ function NameLine({ account, name, isOwn, onSaved }: { account: string; name: st
   if (editing)
     return (
       <div className="mt-1 flex items-center gap-2 flex-wrap">
-        <input className="input !w-[240px] !py-1.5" maxLength={32} autoFocus value={draft} placeholder="Display name" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+        <input className="input !w-full sm:!w-[240px] !py-1.5" maxLength={32} autoFocus value={draft} placeholder="Display name" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
         <span className="font-mono text-[10.5px] text-ink-3">{draft.length}/32</span>
         <button className="btn btn-primary btn-sm" disabled={busy} onClick={save}>
           <Busy on={busy}>Save</Busy>
@@ -235,7 +238,7 @@ function StatsBand({ stats, loading, decimals, symbol, activeCount, exitedCount 
     { k: "Longest hold", v: stats.longestHoldSec ? fmtDur(stats.longestHoldSec) : "0", s: "so far, without exiting" },
     { k: "Challenges", v: String(stats.challengesJoined), s: "joined by locking" },
     { k: "Penalties paid", v: fromUnits(stats.penaltiesPaid, decimals, 0), s: `${symbol} to the stayers · ${exitedCount} exit${exitedCount === 1 ? "" : "s"}` },
-    { k: "Conviction", v: tokenDays >= 1000 ? `${(tokenDays / 1000).toFixed(1)}K` : tokenDays.toFixed(tokenDays < 10 ? 1 : 0), s: `${symbol}·days, amount × time held, active locks` },
+    { k: "Conviction", v: tokenDays >= 1000 ? `${(tokenDays / 1000).toFixed(1)}K` : tokenDays.toFixed(tokenDays < 10 ? 1 : 0), s: `${symbol}·days held, active locks` },
   ];
   if (stats.rewardsClaimed !== null) tiles.splice(5, 0, { k: "Rewards claimed", v: fromUnits(stats.rewardsClaimed, decimals, 0), s: `${symbol} base share of finalized pools` });
   return (
@@ -243,10 +246,10 @@ function StatsBand({ stats, loading, decimals, symbol, activeCount, exitedCount 
       {/* Hairlines per tile, so a row that is not full stays white. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 -mb-px">
         {tiles.map((t, i) => (
-          <motion.div key={t.k} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-surface p-5 sm:p-6 border-b border-line max-lg:[&:nth-child(odd)]:border-r lg:[&:not(:nth-child(4n))]:border-r">
-            <div className="text-[11px] font-mono uppercase tracking-[0.12em] text-ink-2">{t.k}</div>
-            <div className="pixel text-[26px] sm:text-[32px] mt-2 break-all">{loading ? "…" : t.v}</div>
-            <div className="mt-1 text-[12px] text-ink-2">{t.s}</div>
+          <motion.div key={t.k} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-surface p-4 sm:p-6 border-b border-line max-lg:[&:nth-child(odd)]:border-r lg:[&:not(:nth-child(4n))]:border-r">
+            <div className="text-[10.5px] sm:text-[11px] font-mono uppercase tracking-[0.12em] text-ink-2">{t.k}</div>
+            <div className="pixel text-[24px] sm:text-[32px] mt-2 break-all">{loading ? "…" : t.v}</div>
+            <div className="mt-1 text-[11.5px] sm:text-[12px] text-ink-2">{t.s}</div>
           </motion.div>
         ))}
       </div>
@@ -282,7 +285,7 @@ function LocksTab({ locks, challenges, isOwn, loading, fmt }: { locks: Lock[]; c
       />
     );
   return (
-    <div className="card px-6 divide-y divide-line">
+    <div className="card px-5 sm:px-6 divide-y divide-line">
       {locks.map((l) => {
         const cid = joinedChallengeId(l);
         const c = cid !== null ? challenges.find((x) => x.id === cid) : null;
@@ -294,7 +297,8 @@ function LocksTab({ locks, challenges, isOwn, loading, fmt }: { locks: Lock[]; c
                 <span>
                   Lock #{l.id} · {l.status === "active" ? fmt(remaining) : fmt(l.amount)}
                 </span>
-                {l.status === "exited" && <span className="text-bad text-[12px]">paid {fmt(penaltyPaid(l))} penalty</span>}
+                <span className={`tag sm:hidden! ${l.status === "active" ? "tag-live" : l.status === "exited" ? "tag-bad" : "tag-muted"}`}>{l.status}</span>
+                {l.status === "exited" && <span className="text-bad text-[12px] basis-full sm:basis-auto">paid {fmt(penaltyPaid(l))} penalty</span>}
               </div>
               <div className="text-[11.5px] text-ink-2">
                 {strategyLabel(l.strategy)} · started {fmtDate(l.start_ts)}
@@ -308,11 +312,11 @@ function LocksTab({ locks, challenges, isOwn, loading, fmt }: { locks: Lock[]; c
                 )}
               </div>
             </div>
-            <span className={`tag ${l.status === "active" ? "tag-live" : l.status === "exited" ? "tag-bad" : "tag-muted"}`}>{l.status}</span>
+            <span className={`tag max-sm:hidden! ${l.status === "active" ? "tag-live" : l.status === "exited" ? "tag-bad" : "tag-muted"}`}>{l.status}</span>
           </div>
         );
         return isOwn ? (
-          <Link key={l.id} to="/app/locks" className="block hover:bg-paper -mx-6 px-6 transition">
+          <Link key={l.id} to="/app/locks" className="block hover:bg-paper -mx-5 px-5 sm:-mx-6 sm:px-6 transition">
             {row}
           </Link>
         ) : (
@@ -328,18 +332,18 @@ function ActivityTab({ locks, challenges, posts, loading, fmt }: { locks: Lock[]
   if (loading) return <div className="card p-6 text-[13px] text-ink-2">Reading activity…</div>;
   if (!items.length) return <Empty title="Nothing yet" sub="Locks, exits, claims and Floor posts will show up here as they happen." />;
   return (
-    <div className="card p-6">
-      <ol className="relative border-l border-line ml-2 flex flex-col gap-5">
+    <div className="card p-5 sm:p-6">
+      <ol className="relative border-l border-line ml-1.5 sm:ml-2 flex flex-col gap-5">
         {items.map((it) => {
           const dot = it.tone === "bad" ? "bg-bad" : it.tone === "ok" ? "bg-ok" : "bg-ink-3";
           const text = it.tone === "bad" ? "text-bad" : it.tone === "ok" ? "text-ok" : "text-ink";
           const body = (
             <>
               <div className={`text-[13px] leading-snug ${text}`}>{it.text}</div>
-              <div className="mt-0.5 text-[10.5px] font-mono text-ink-3">
+              <div className="mt-0.5 text-[10.5px] font-mono text-ink-3" title={it.approx ? "The chain keeps no timestamp for this moment; the time is inferred from the lock." : undefined}>
                 {it.approx ? "~" : ""}
                 {timeAgo(new Date(it.ts * 1000).toISOString())}
-                {it.approx && <span className="ml-1.5">inferred, the chain keeps no timestamp for this</span>}
+                {it.approx && <span className="ml-1.5">· inferred</span>}
               </div>
             </>
           );
@@ -413,7 +417,7 @@ function ChallengesTab({ account, locks, challenges, sponsored, boostBps, isOwn,
       />
     );
   return (
-    <div className="card px-6 divide-y divide-line">
+    <div className="card px-5 sm:px-6 divide-y divide-line">
       {rows.map((c) => {
         const tm = meta(c.token);
         const sm = meta(c.sponsor_token);
@@ -423,7 +427,7 @@ function ChallengesTab({ account, locks, challenges, sponsored, boostBps, isOwn,
         const est = conviction > 0n ? estimateReward(c, conviction, boostBps) : null;
         const roles = [active.length ? "locker" : null, left.length ? "exited" : null, c.creator === account ? "creator" : null, sponsored.has(c.id) ? "sponsor" : null].filter(Boolean).join(" · ");
         return (
-          <div key={c.id} className="py-3.5 flex items-center justify-between gap-3 text-[13px]">
+          <div key={c.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 text-[13px]">
             <div className="min-w-0">
               <Link to={`/app/challenges/${c.id}`} className="text-ink hover:underline underline-offset-4">
                 #{c.id} · {c.title}
@@ -434,15 +438,15 @@ function ChallengesTab({ account, locks, challenges, sponsored, boostBps, isOwn,
                 {sponsored.has(c.id) ? ` · sponsored ${fromUnits(sponsored.get(c.id)!, sm.decimals, 0)} ${sm.symbol}` : ""}
               </div>
             </div>
-            <div className="text-right shrink-0">
+            <div className="shrink-0 flex items-baseline gap-3 sm:block sm:text-right">
               {conviction > 0n ? (
                 <>
-                  <div className="pixel text-[16px]">{sharePct(conviction, c.total_conviction)}</div>
-                  <div className="text-[10.5px] text-ink-3 font-mono">of conviction</div>
+                  <span className="pixel text-[16px]">{sharePct(conviction, c.total_conviction)}</span>
+                  <span className="text-[10.5px] text-ink-3 font-mono sm:block">of conviction</span>
                   {est && (
-                    <div className="text-[11.5px] text-ink-2 mt-0.5">
+                    <span className="text-[11.5px] text-ink-2 sm:block sm:mt-0.5">
                       ~{fromUnits(est.total, sm.decimals, 0)} {sm.symbol} <span className="text-ink-3">at {mult(boostBps)}</span>
-                    </div>
+                    </span>
                   )}
                 </>
               ) : (
