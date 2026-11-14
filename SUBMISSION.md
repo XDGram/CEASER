@@ -1,5 +1,19 @@
 # Submission notes
 
+Deadline: 14 Nov 2026, 23:59 UTC (00:59 Sunday, Nigerian time). Submit once at https://nearhackathon.com/#apply; later changes go through the site's request-changes page, never a second submission.
+
+## Form fields
+
+| Field | Value |
+|---|---|
+| Project name | CEASER |
+| Tracks | Memecoins With Mechanics, Open Innovation |
+| NEAR wallet (prize payout, mainnet) | ceasern1.near |
+| Repository | https://github.com/XDGram/CEASER |
+| Demo post | link to the X post below |
+| Website | https://ceaser-nine.vercel.app |
+| What did you build? | the paragraph below |
+
 ## X post draft
 
 ```
@@ -11,30 +25,23 @@ https://ceaser-nine.vercel.app
 @NEARProtocol #NEARHackathon
 ```
 
-Attach the 60-second screencast to the post: the rules require a video when judges can't run the demo themselves. Optional extra tags: @NearLegion @NearBuilders. Put the repo link in the form, not the post, to stay under 280 characters.
+Attach the 60-second screencast to the post: the rules require a video when judges can't run the demo themselves. Optional extra tags: @NearLegion @NearBuilders. The repo link goes in the form, not the post, to stay under 280 characters.
 
 ## "What did you build?" (form field, 20 to 2,000 characters)
 
 ```
-CEASER is a commitment protocol on NEAR that turns memecoin holding from a solo gamble into a coordinated game. Holders lock NEP-141 tokens behind strategies their future self cannot override: time locks, ROI ladders that unlock in tranches as an oracle TWAP crosses price targets, or the outcome of a community Challenge. A Challenge is a public goal (lock X tokens together before a deadline) with a sponsor reward pool. The signature mechanic: leaving a lock early costs a penalty, and that penalty is paid into the Challenge pool, so dumpers pay the diamond hands who stayed. Rewards are split by conviction (amount x time), and lockers with NEAR staked in a whitelisted pool get up to a 2x boost, turning memecoin activity into NEAR staking demand. Price unlocks are protected by a TWAP, a two-read commit with cooldown, a liquidity floor, minimum lock durations, an immutable reference price and a max-duration cap. Shipped on testnet: a Rust vault contract with 18 sandbox integration tests (7 core flows, 11 adversarial tests from an audit pass), a mock oracle, a test token and a mock staking pool; ./demo.sh runs the full arc against the live deployment with 49 assertions; and a web app with a landing page, lock flow, Challenge pages with conviction leaderboards, an early-exit dialog, and The Floor, a community feed of theses, confessions and on-chain receipts. The oracle is a mock with real TWAP semantics; a Ref Finance integration is on the roadmap.
+CEASER is a commitment protocol on NEAR that stops holders fumbling their moonbags. Most memecoin holders sell scared at 2x and watch it do 50x. With CEASER you lock your bag behind an ROI ladder you choose while calm, for example 10% at 5x, 10% at 10x, 20% at 25x and 60% at 100x, and your scared future self cannot sell early. Every tranche also releases at a maximum duration you set, so principal is never trapped. Communities run Challenges: shared holding goals with sponsor reward pools. The signature mechanic: leaving a lock early costs a penalty that is paid into the Challenge pool, so dumpers pay the diamond hands who stayed. Rewards are split by conviction (amount x time held), and lockers with NEAR staked get up to a 2x boost, turning memecoin activity into NEAR staking demand. Price unlocks resist manipulation with a TWAP, a two-read commit with cooldown, a liquidity floor and an immutable reference price. Shipped on testnet: a Rust vault contract with 18 sandbox tests (7 core flows, 11 adversarial tests from an audit pass); ./demo.sh runs the full arc on the live deployment with 49 assertions; and a web app with the moonbag lock flow, live ladder progress, an early-exit dialog that shows exactly who receives your penalty, Challenge pages with conviction leaderboards, Communities with milestones, treasury and cross-community rankings, member profiles, a community feed, and live activity pop-ups driven by real on-chain events. Demo content is labelled; the oracle is a mock with real TWAP semantics.
 ```
-
-
-Replace the two bracketed placeholders with the required hackathon tags before
-posting. The draft is under 280 characters with the placeholders in place, and
-the real tags are shorter than the placeholders.
 
 ## 60-second screencast shot list
 
-Record at 1366px wide in a desktop browser with a NEAR testnet wallet already
-connected, against https://ceaser-nine.vercel.app. One line per shot: what is
-on screen, then the on-screen caption.
+Record at about 1366px wide in a desktop browser with your NEAR testnet wallet connected, against https://ceaser-nine.vercel.app. Leave activity pop-ups on; they appear bottom left.
 
 | Time | On screen | Caption |
 |---|---|---|
-| 0 to 12s | Landing hero with the pitch line, then a slow scroll through the demo-arc story: A locks, B locks with staked NEAR, A dumps, the penalty lands in the Challenge, B claims principal plus a boosted reward. | Memecoin dumps pay the diamond hands. |
-| 12 to 18s | Click Launch app, the wallet connects, the Overview loads: CSTEST balance, locked total, NEAR boost tier, claimable locks, your Challenges. | Your bag, your boost tier, your Challenges. |
-| 18 to 30s | Lock tab. Pick the ROI ladder 50/25/25 at +50/+100/+200%, choose a Challenge, type a pledge note, submit. The animated lock flow runs (waiting for wallet, confirming on NEAR, locked) and jumps to the new lock in My locks. | Lock behind price, time or a Challenge. Say why. |
-| 30 to 40s | Open a Challenge detail page. Scroll the lockers leaderboard ordered by conviction, the paper hands list, the sponsors, and the estimated reward for your lock, then the Floor feed for this Challenge. | Earlier and bigger locks earn more. Everyone can see who held. |
-| 40 to 52s | My locks. Click Exit early on a lock. The dialog shows the breakdown: what is paid out now, the penalty, and that the penalty goes to the lockers who stay. Press and hold the confirm button until it completes. | Leave early and you pay the people who stayed. |
-| 52 to 60s | The Floor. Scroll confessions, theses and pledges with pixel avatars and conviction badges, ending on an exit receipt. Cut to the pitch line. | Diamond hands who back NEAR get paid more. |
+| 0 to 8s | Landing hero, LOCK. HOLD. GET PAID., then scroll to "You sold at 2x because you were scared." | You sold scared. It did 50x. |
+| 8 to 20s | Lock tab: Protect a moonbag, pick the Moonbag preset (10% 5x, 10% 10x, 20% 25x, 60% 100x), point at the safety-release line, lock. The lock animation lands on the new card in My locks with its live ladder and % protected. | Lock it behind targets your future self can't override. |
+| 20 to 32s | Communities tab: the leaderboard, then open Diamond Hands DAO: member avatars, milestones, pinned announcement, a pop-up arriving bottom left. | Communities hold together. |
+| 32 to 42s | A Challenge page: lockers by conviction, paper hands list, sponsors, your estimated reward. | Earlier and bigger locks earn more. |
+| 42 to 54s | My locks: Early exit. The dialog: "You get back X. You lose Y", who receives the penalty, the unlocks you cancel. Hold to confirm, or click Stay locked. | Dump early and you pay the people who stayed. |
+| 54 to 60s | Back to the landing hero with the pitch line. | Diamond hands who back NEAR get paid more. |
