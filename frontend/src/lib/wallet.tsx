@@ -8,6 +8,7 @@ import { actionCreators } from "@near-js/transactions";
 import { CONFIG } from "../config";
 import { txHash } from "./near";
 import { createDemoAccount, demoAccount, forgetDemo, loadDemo, type DemoAccount } from "./demoAccount";
+import { createPost, hasPendingPost, POSTED_EVENT, takePendingPost } from "./floor";
 
 export type ToastKind = "ok" | "err" | "info";
 export interface Toast {
@@ -34,6 +35,8 @@ interface WalletCtx {
   connect: () => void;
   disconnect: () => Promise<void>;
   call: (receiverId: string, methodName: string, args: Record<string, unknown>, gas: string, deposit?: string) => Promise<unknown>;
+  /** A plain NEAR transfer, in yoctoNEAR. Browser wallets redirect away before this resolves. */
+  transfer: (receiverId: string, yocto: string) => Promise<unknown>;
   toasts: Toast[];
   toast: (text: string, kind?: ToastKind, hash?: string | null) => void;
   dismiss: (id: number) => void;
@@ -91,8 +94,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
         })();
         if (h || err) setReturnedTx({ hash: h ? h.split(",")[0] : null, error: err ? decodeURIComponent(err) : null });
-        if (h && !pendingLock) toast("Transaction confirmed", "ok", h.split(",")[0]);
-        if (err && !pendingLock) toast(decodeURIComponent(err), "err");
+        const pendingPost = hasPendingPost();
+        if (h && !pendingLock && !pendingPost) toast("Transaction confirmed", "ok", h.split(",")[0]);
+        if (err && !pendingLock && !pendingPost) toast(decodeURIComponent(err), "err");
         if (h || err || url.searchParams.has("account_id")) {
           ["transactionHashes", "errorMessage", "errorCode", "account_id", "public_key", "all_keys"].forEach((k) => url.searchParams.delete(k));
           window.history.replaceState({}, "", url.pathname + url.search + url.hash);
@@ -152,9 +156,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [accountId, demo, toast],
   );
 
+  const transfer = useCallback(
+    async (receiverId: string, yocto: string) => {
+      if (demo) {
+        const outcome = await demoAccount(demo).sendMoney(receiverId, BigInt(yocto));
+        return outcome;
+      }
+      if (!accountId || !selectorRef.current) {
+        modalRef.current?.show();
+        throw new Error("Connect a wallet first");
+      }
+      const wallet = await selectorRef.current.wallet();
+      return wallet.signAndSendTransaction({ signerId: accountId, receiverId, actions: [actionCreators.transfer(BigInt(yocto))] });
+    },
+    [accountId, demo],
+  );
+
+  // A post whose fee was paid through MyNearWallet: the draft was saved before
+  // the redirect, and is published here with the returned transaction hash,
+  // whichever page the wallet sent the user back to.
+  const postResumed = useRef(false);
+  useEffect(() => {
+    if (postResumed.current || !returnedTx || !accountId || !hasPendingPost()) return;
+    postResumed.current = true;
+    const draft = takePendingPost();
+    if (!draft) return;
+    if (returnedTx.error || !returnedTx.hash) {
+      toast(returnedTx.error ? `Post not published: ${returnedTx.error}` : "Post not published: the fee was not paid", "err");
+      return;
+    }
+    if (draft.author !== accountId) return;
+    createPost({ ...draft, fee_tx: returnedTx.hash })
+      .then(() => {
+        toast("Posted · 0.01 NEAR fee paid", "ok", returnedTx.hash);
+        window.dispatchEvent(new Event(POSTED_EVENT));
+      })
+      .catch((e) => toast(`Fee paid, but the post was not published: ${errorText(e)}`, "err", returnedTx.hash));
+  }, [returnedTx, accountId, toast]);
+
   const value = useMemo(
-    () => ({ ready, returnedTx, accountId, isDemo: demo !== null, startDemo, connect, disconnect, call, toasts, toast, dismiss }),
-    [ready, returnedTx, accountId, demo, startDemo, connect, disconnect, call, toasts, toast, dismiss],
+    () => ({ ready, returnedTx, accountId, isDemo: demo !== null, startDemo, connect, disconnect, call, transfer, toasts, toast, dismiss }),
+    [ready, returnedTx, accountId, demo, startDemo, connect, disconnect, call, transfer, toasts, toast, dismiss],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

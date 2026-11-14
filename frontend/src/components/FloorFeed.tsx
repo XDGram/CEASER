@@ -2,12 +2,98 @@ import { motion } from "framer-motion";
 import { Select } from "./Select";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { fmtDur, fromUnits, short, timeAgo } from "../lib/near";
-import { createPost, isDemo, toggleReaction, type ConvictionInfo, type FloorPost, type PostKind } from "../lib/floor";
+import { fmtDur, fromUnits, short, timeAgo, txHash } from "../lib/near";
+import {
+  ANNOUNCE_BALANCE_YOCTO,
+  createPost,
+  isDemo,
+  MIN_BALANCE_YOCTO,
+  nearBalance,
+  POST_FEE_YOCTO,
+  POSTED_EVENT,
+  savePendingPost,
+  takePendingPost,
+  toggleReaction,
+  type ConvictionInfo,
+  type FloorPost,
+  type PostDraft,
+  type PostKind,
+} from "../lib/floor";
+import { CONFIG } from "../config";
 import { errorText, useWallet } from "../lib/wallet";
 import { Pfp } from "./Pfp";
 import { profilePath } from "../lib/profile";
 import { Busy } from "./SectionHead";
+
+
+// ---------- paid posting ----------
+
+const FEE_NOTE = "Fee verified in the app; the feed database is open on this testnet demo.";
+export const LOW_BALANCE = "Posting needs 1 Ⓝ in your account. NEAR is the cost of a voice here.";
+
+const balanceCache = new Map<string, { at: number; p: Promise<bigint | null> }>();
+/** Liquid NEAR of an account, cached for 20 seconds; null when unreadable. */
+function readBalance(account: string, fresh = false): Promise<bigint | null> {
+  const hit = balanceCache.get(account);
+  if (!fresh && hit && Date.now() - hit.at < 20_000) return hit.p;
+  const p = nearBalance(account).catch(() => null);
+  balanceCache.set(account, { at: Date.now(), p });
+  return p;
+}
+
+/** The connected account's NEAR balance, refreshed after each post. */
+export function useNearBalance(account: string | null): bigint | null | undefined {
+  const [bal, setBal] = useState<bigint | null | undefined>(undefined);
+  useEffect(() => {
+    if (!account) return setBal(undefined);
+    let live = true;
+    const load = (fresh: boolean) => readBalance(account, fresh).then((b) => live && setBal(b));
+    load(false);
+    const onPosted = () => load(true);
+    window.addEventListener(POSTED_EVENT, onPosted);
+    return () => {
+      live = false;
+      window.removeEventListener(POSTED_EVENT, onPosted);
+    };
+  }, [account]);
+  return bal;
+}
+
+/**
+ * Pays the 0.01 NEAR fee to the treasury, then publishes the post with that
+ * transaction as its receipt. The draft is saved first so a browser wallet's
+ * redirect can finish it on return (see WalletProvider).
+ */
+function usePaidPost() {
+  const { transfer } = useWallet();
+  return useCallback(
+    async (draft: PostDraft) => {
+      const bal = await readBalance(draft.author, true);
+      if (bal !== null && bal < MIN_BALANCE_YOCTO) throw new Error(LOW_BALANCE);
+      if (draft.kind === "announcement" && bal !== null && bal < ANNOUNCE_BALANCE_YOCTO) throw new Error("Announcements need 25 Ⓝ held in your account.");
+      savePendingPost(draft);
+      let hash: string | null;
+      try {
+        hash = txHash(await transfer(CONFIG.contracts.treasury, POST_FEE_YOCTO.toString()));
+      } finally {
+        takePendingPost();
+      }
+      if (!hash) throw new Error("The fee transfer returned no transaction id.");
+      await createPost({ ...draft, fee_tx: hash });
+      window.dispatchEvent(new Event(POSTED_EVENT));
+    },
+    [transfer],
+  );
+}
+
+/** "paid 0.01 Ⓝ", linking to the fee transaction. */
+export function FeeTag({ tx }: { tx: string }) {
+  return (
+    <a href={`${CONFIG.explorerUrl}/txns/${tx}`} target="_blank" rel="noopener" className="text-[10.5px] font-mono text-ink-3 hover:text-ink underline-offset-2 hover:underline" title="Verified posting fee transaction">
+      paid 0.01 Ⓝ
+    </a>
+  );
+}
 
 // Pixel glyphs for reactions, drawn in the page palette: a diamond for
 // conviction, a wilting line for cope.
@@ -134,12 +220,13 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const publish = usePaidPost();
   const sendReply = async () => {
     if (!accountId) return toast("Connect a wallet to reply", "err");
     setBusy(true);
     try {
       // Replies to announcements are ordinary replies, not announcements.
-      await createPost({ author: accountId, kind: post.kind === "announcement" ? "update" : post.kind, body: reply, parent_id: post.id, challenge_id: post.challenge_id, community_id: post.community_id });
+      await publish({ author: accountId, kind: post.kind === "announcement" || post.derived ? "update" : post.kind, body: reply, parent_id: post.id, challenge_id: post.challenge_id, community_id: post.community_id });
       setReply("");
       setReplying(false);
       onChanged();
@@ -170,6 +257,7 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
               {post.kind === "announcement" && post.leader && <LeaderTag />}
               <KindTag kind={post.kind} />
               <span className="text-[11px] text-ink-3">{timeAgo(post.created_at)}</span>
+              {post.fee_tx && <FeeTag tx={post.fee_tx} />}
             </span>
           </div>
           <p className="mt-2 text-[13.5px] leading-relaxed text-ink whitespace-pre-wrap break-words">{post.body}</p>
@@ -201,6 +289,7 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
                       </Link>
                       <span className="text-[10.5px] text-ink-3">{timeAgo(r.created_at)}</span>
                       {isDemo(r) && <DemoTag />}
+                      {r.fee_tx && <FeeTag tx={r.fee_tx} />}
                     </div>
                     <p className="text-[13px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words">{r.body}</p>
                   </div>
@@ -213,7 +302,7 @@ export function PostCard({ post, names, conviction, onChanged, showChallengeLink
             <div className="mt-3 flex items-start gap-2">
               <textarea className="input min-h-[60px] text-[13px]" maxLength={600} placeholder="Say it to their face" value={reply} onChange={(e) => setReply(e.target.value)} />
               <button className="btn btn-primary btn-sm shrink-0" disabled={busy || !reply.trim()} onClick={sendReply}>
-                <Busy on={busy}>Reply</Busy>
+                <Busy on={busy}>Reply · 0.01 Ⓝ</Busy>
               </button>
             </div>
           )}
@@ -253,14 +342,18 @@ export function Composer({
   const [target, setTarget] = useState<string>(challengeId !== undefined ? String(challengeId) : "");
   const [busy, setBusy] = useState(false);
 
+  const publish = usePaidPost();
+  const balance = useNearBalance(accountId);
+  const tooPoor = balance !== undefined && balance !== null && balance < MIN_BALANCE_YOCTO;
+  const canAnnounce = balance === undefined || balance === null || balance >= ANNOUNCE_BALANCE_YOCTO;
   const post = async () => {
     if (!accountId) return connect();
     setBusy(true);
     try {
-      await createPost({ author: accountId, kind, body, challenge_id: target ? parseInt(target, 10) : null, community_id: communityId ?? null });
+      await publish({ author: accountId, kind, body, challenge_id: target ? parseInt(target, 10) : null, community_id: communityId ?? null });
       setBody("");
       onPosted();
-      toast("Posted to the floor", "ok");
+      toast("Posted · 0.01 NEAR fee paid", "ok");
     } catch (e) {
       toast(errorText(e), "err");
     } finally {
@@ -275,7 +368,13 @@ export function Composer({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             {kinds.map((k) => (
-              <button key={k} className={`pill !normal-case !tracking-normal cursor-pointer ${kind === k ? "border-ink text-ink" : ""} ${k === "announcement" ? "!border-accent/50 text-accent-2" : ""}`} onClick={() => setKind(k)}>
+              <button
+                key={k}
+                disabled={k === "announcement" && !canAnnounce}
+                title={k === "announcement" && !canAnnounce ? "Announcements need 25 Ⓝ held in your account" : undefined}
+                className={`pill !normal-case !tracking-normal cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${kind === k ? "border-ink text-ink" : ""} ${k === "announcement" ? "!border-accent/50 text-accent-2" : ""}`}
+                onClick={() => setKind(k)}
+              >
                 {KIND_LABEL[k] ?? k}
               </button>
             ))}
@@ -285,6 +384,7 @@ export function Composer({
           </div>
           <textarea
             className="input mt-3 min-h-[76px] text-[13.5px]"
+            disabled={tooPoor}
             maxLength={600}
             placeholder={
               kind === "thesis"
@@ -300,11 +400,14 @@ export function Composer({
           />
           <div className="mt-2.5 flex items-center justify-between gap-3">
             <span className="text-[11px] font-mono text-ink-3">{body.length}/600 · posts as {accountId ? short(accountId, 22) : "your wallet"}</span>
-            <button className="btn btn-accent btn-sm" disabled={busy || (!!accountId && !body.trim())} onClick={post}>
-              <Busy on={busy}>{accountId ? "Post" : "Connect to post"}</Busy>
+            <button className="btn btn-accent btn-sm" disabled={busy || tooPoor || (!!accountId && !body.trim()) || (kind === "announcement" && !canAnnounce)} onClick={post}>
+              <Busy on={busy}>{accountId ? "Post · 0.01 Ⓝ" : "Connect to post"}</Busy>
             </button>
           </div>
-          {note && <p className="mt-2 text-[11px] text-ink-3">{note}</p>}
+          {tooPoor && <p className="mt-2 text-[12px] text-bad">{LOW_BALANCE}</p>}
+          {!tooPoor && kinds.includes("announcement") && !canAnnounce && <p className="mt-2 text-[12px] text-ink-2">Announcements need 25 Ⓝ held in your account, besides being a community leader.</p>}
+          <p className="mt-2 text-[11px] text-ink-3">{FEE_NOTE}</p>
+          {note && <p className="mt-1 text-[11px] text-ink-3">{note}</p>}
         </div>
       </div>
     </div>
@@ -316,7 +419,13 @@ export function useAutoRefresh(fn: () => void, ms = 30000) {
   ref.current = fn;
   useEffect(() => {
     const id = window.setInterval(() => ref.current(), ms);
-    return () => window.clearInterval(id);
+    // A post published anywhere, including after a wallet redirect, refreshes open feeds.
+    const onPosted = () => ref.current();
+    window.addEventListener(POSTED_EVENT, onPosted);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener(POSTED_EVENT, onPosted);
+    };
   }, [ms]);
 }
 

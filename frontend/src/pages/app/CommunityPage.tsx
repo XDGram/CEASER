@@ -7,7 +7,7 @@ import { recentActivity, useLiveActivity, type ActivityEvent } from "../../lib/l
 import { useProtocol } from "../../lib/protocol";
 import { useWallet } from "../../lib/wallet";
 import { computeCommunityStats, loadCommunity, lockChallenge, type Community, type CommunityStats } from "../../lib/community";
-import { convictionByOwner, isDemo, loadFeed, type FeedData, type PostKind } from "../../lib/floor";
+import { convictionByOwner, feesCollected, isDemo, loadFeed, POSTED_EVENT, type FeedData, type PostKind } from "../../lib/floor";
 import { profilePath } from "../../lib/profile";
 import type { Challenge, Lock } from "../../lib/types";
 import { Pfp } from "../../components/Pfp";
@@ -64,6 +64,17 @@ export function CommunityPage() {
     loadConversation();
   }, [loadConversation]);
   useAutoRefresh(loadConversation);
+
+  // Posting fees: verified 0.01 NEAR transfers to the treasury attached to
+  // posts in this community's scope.
+  const [fees, setFees] = useState<bigint | null>(null);
+  useEffect(() => {
+    if (!community) return;
+    const load = () => feesCollected(community.id, community.challenge_ids).then(setFees).catch(() => setFees(null));
+    load();
+    window.addEventListener(POSTED_EVENT, load);
+    return () => window.removeEventListener(POSTED_EVENT, load);
+  }, [community]);
 
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find((t) => t.key === params.get("tab"))?.key ?? "conversation") as TabKey;
@@ -177,7 +188,7 @@ export function CommunityPage() {
         )}
         {tab === "treasury" && (
           <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2 gap-5 items-start">
-            <Treasury stats={stats} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} />
+            <Treasury stats={stats} campaigns={campaigns} symbol={tm.symbol} decimals={tm.decimals} fees={fees} />
             <Growth stats={stats} />
           </div>
         )}
@@ -536,7 +547,7 @@ function Distribution({ campaigns, locks, meta }: { campaigns: Challenge[]; lock
   );
 }
 
-function Treasury({ stats, campaigns, symbol, decimals }: { stats: CommunityStats | null; campaigns: Challenge[]; symbol: string; decimals: number }) {
+function Treasury({ stats, campaigns, symbol, decimals, fees }: { stats: CommunityStats | null; campaigns: Challenge[]; symbol: string; decimals: number; fees: bigint | null }) {
   const refundable = campaigns.filter((c) => c.state === "failed").reduce((a, c) => a + BigInt(c.sponsor_total), 0n);
   const rows: { k: string; v: bigint | null; src: "chain" | "derived" }[] = [
     { k: "Sponsored in", v: stats?.treasury.sponsored ?? null, src: "chain" },
@@ -562,7 +573,19 @@ function Treasury({ stats, campaigns, symbol, decimals }: { stats: CommunityStat
           </div>
         ))}
       </div>
+      <div className="mt-1 flex items-baseline justify-between gap-3 py-2 border-t border-line">
+        <span className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-2 font-mono">Fees collected</span>
+          <span className="pill !px-1.5 !py-0 !text-[9px] !tracking-[0.1em]" title="Each fee is a NEAR transfer checked on chain before its post was published">
+            Verified tx
+          </span>
+        </span>
+        <span className="text-[13px] text-ink text-right whitespace-nowrap">
+          <span className="pixel text-[13px]">{fees === null ? "…" : fromUnits(fees, 24, 2)}</span> <span className="text-ink-3 text-[11px]">NEAR</span>
+        </span>
+      </div>
       <p className="mt-3 text-[11.5px] text-ink-3">The treasury is the Challenge pools held by the vault; there is no separate wallet.</p>
+      <p className="mt-2 text-[11.5px] text-ink-3">Fees collected are 0.01 NEAR posting fees on this community's conversation, paid to the protocol treasury account, not to the vault.</p>
       {refundable > 0n && (
         <p className="mt-2 text-[11.5px] text-ink-3">Refundable is sponsor deposits on failed campaigns. The vault does not record how much of it has already been withdrawn.</p>
       )}

@@ -23,6 +23,9 @@ export interface FloorPost {
   parent_id: string | null;
   meta: Record<string, unknown>;
   community_id: string | null;
+  /** Hash of the verified 0.01 NEAR posting fee transfer, when one was paid. */
+  fee_tx: string | null;
+  fee_yocto: string | null;
   /**
    * An announcement whose author leads its community: the community creator or
    * the creator of one of its campaigns. Checked here in the app, because the
@@ -60,6 +63,8 @@ interface PostRow {
   parent_id: string | null;
   meta: Record<string, unknown> | null;
   community_id?: string | null;
+  fee_tx?: string | null;
+  fee_yocto?: string | number | null;
 }
 
 interface StatRow {
@@ -86,7 +91,7 @@ export function deriveReceipts(locks: Lock[], challenges: Challenge[], skipLockI
     return c ? `"${c.title}"` : id ? `Challenge #${id}` : null;
   };
   for (const l of locks) {
-    const base = { author: l.owner, parent_id: null, meta: {}, community_id: null, leader: false, diamonds: 0, copes: 0, myReaction: null, replies: [], derived: true };
+    const base = { author: l.owner, parent_id: null, meta: {}, community_id: null, fee_tx: null, fee_yocto: null, leader: false, diamonds: 0, copes: 0, myReaction: null, replies: [], derived: true };
     if (!skipLockIds.has(l.id)) {
       const where = l.challenge_id ? `joined ${title(l.challenge_id)} with ${amt(l.amount)} ${sym()}` : `locked ${amt(l.amount)} ${sym()} behind a ladder`;
       out.push({ ...base, id: `derived-pledge-${l.id}`, created_at: new Date(l.start_ts * 1000).toISOString(), kind: "pledge", body: where, challenge_id: l.challenge_id, lock_id: l.id });
@@ -176,6 +181,8 @@ function decorator(statRows: unknown, mine: unknown): (r: PostRow) => FloorPost 
     ...r,
     meta: r.meta ?? {},
     community_id: r.community_id ?? null,
+    fee_tx: r.fee_tx ?? null,
+    fee_yocto: r.fee_yocto === null || r.fee_yocto === undefined ? null : typeof r.fee_yocto === "number" ? BigInt(Math.trunc(r.fee_yocto)).toString() : r.fee_yocto.split(".")[0],
     leader: false,
     diamonds: stats.get(r.id)?.diamonds ?? 0,
     copes: stats.get(r.id)?.copes ?? 0,
@@ -222,15 +229,153 @@ export async function loadAuthorPosts(author: string, viewer: string | null): Pr
   return own.map((r) => ({ ...decorate(r), replies: r.parent_id === null ? (byParent.get(r.id) ?? []) : [] }));
 }
 
-export async function createPost(p: { author: string; kind: PostKind; body: string; challenge_id?: number | null; lock_id?: number | null; parent_id?: string | null; community_id?: string | null }): Promise<void> {
+// ---------- posting fee ----------
+//
+// Speech costs NEAR: a thesis, confession, update, announcement or reply is
+// paid for with a plain 0.01 NEAR transfer to the protocol treasury, and the
+// author must hold at least 1 NEAR (25 for an announcement). Pledges, which the
+// lock flow writes for you, and reactions stay free.
+//
+// The fee is verified in the app, against the chain, before the row is
+// inserted. The feed database is open on this testnet demo, so a direct
+// insert can still skip this check; a server-side verifier is the next step.
+
+const NEAR = 10n ** 24n;
+export const POST_FEE_YOCTO = NEAR / 100n;
+export const MIN_BALANCE_YOCTO = NEAR;
+export const ANNOUNCE_BALANCE_YOCTO = 25n * NEAR;
+
+/** True when this post must carry a verified fee. */
+export function needsFee(p: { kind: PostKind; parent_id?: string | null }): boolean {
+  return !!p.parent_id || p.kind === "thesis" || p.kind === "confession" || p.kind === "update" || p.kind === "announcement";
+}
+
+/** JSON-RPC with the same endpoint failover the rest of the app uses. */
+async function rpc<T>(method: string, params: unknown): Promise<T> {
+  let last: unknown = null;
+  for (const url of CONFIG.rpcUrls) {
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: "ceaser", method, params }) });
+      const j = await res.json();
+      if (j.error) throw new Error(j.error?.cause?.name ?? j.error?.message ?? "RPC error");
+      return j.result as T;
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error("No RPC endpoint answered");
+}
+
+/** Liquid NEAR balance in yocto, from view_account. */
+export async function nearBalance(account: string): Promise<bigint> {
+  const r = await rpc<{ amount: string }>("query", { request_type: "view_account", account_id: account, finality: "final" });
+  return BigInt(r.amount);
+}
+
+interface TxResult {
+  status: { SuccessValue?: string; Failure?: unknown };
+  transaction: { signer_id: string; receiver_id: string; actions: (string | { Transfer?: { deposit: string } })[] };
+}
+
+/**
+ * Checks a fee transaction on chain: final, successful, signed by the author,
+ * sent to the treasury, carrying a Transfer of at least 0.01 NEAR, and not
+ * already attached to another post. Returns the amount paid.
+ */
+export async function verifyFee(hash: string, author: string): Promise<bigint> {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(hash)) throw new Error("That fee transaction id is not valid.");
+  const { data: used } = await supabase.from("posts").select("id").eq("fee_tx", hash).limit(1);
+  if (used && used.length) throw new Error("That fee transaction already paid for another post.");
+  let tx: TxResult;
+  try {
+    tx = await rpc<TxResult>("tx", { tx_hash: hash, sender_account_id: author, wait_until: "FINAL" });
+  } catch {
+    throw new Error("The fee transaction was not found on chain for this account.");
+  }
+  if (!tx.status || tx.status.Failure !== undefined || tx.status.SuccessValue === undefined) throw new Error("The fee transaction did not succeed.");
+  if (tx.transaction.signer_id !== author) throw new Error("The fee was paid by a different account.");
+  if (tx.transaction.receiver_id !== CONFIG.contracts.treasury) throw new Error("The fee was not sent to the CEASER treasury.");
+  const paid = tx.transaction.actions.reduce((a, x) => a + (typeof x === "object" && x.Transfer ? BigInt(x.Transfer.deposit) : 0n), 0n);
+  if (paid < POST_FEE_YOCTO) throw new Error("The fee transaction sent less than 0.01 NEAR.");
+  return paid;
+}
+
+export interface PostDraft {
+  author: string;
+  kind: PostKind;
+  body: string;
+  challenge_id?: number | null;
+  lock_id?: number | null;
+  parent_id?: string | null;
+  community_id?: string | null;
+}
+
+export async function createPost(p: PostDraft & { fee_tx?: string | null; fee_yocto?: string | null }): Promise<void> {
   const body = p.body.trim();
   if (!body) throw new Error("Write something first");
   if (body.length > 600) throw new Error("At most 600 characters");
-  const { error } = await supabase
-    .from("posts")
-    .insert({ author: p.author, kind: p.kind, body, challenge_id: p.challenge_id ?? null, lock_id: p.lock_id ?? null, parent_id: p.parent_id ?? null, community_id: p.community_id ?? null });
-  if (error) throw new Error(error.message);
+  let fee_tx: string | null = null;
+  let fee_yocto: string | null = null;
+  if (needsFee(p)) {
+    if (!p.fee_tx) throw new Error("This post needs its 0.01 NEAR fee.");
+    // The amount stored is what the chain says was paid, not what the caller claims.
+    fee_yocto = (await verifyFee(p.fee_tx, p.author)).toString();
+    fee_tx = p.fee_tx;
+  }
+  const { error } = await supabase.from("posts").insert({
+    author: p.author,
+    kind: p.kind,
+    body,
+    challenge_id: p.challenge_id ?? null,
+    lock_id: p.lock_id ?? null,
+    parent_id: p.parent_id ?? null,
+    community_id: p.community_id ?? null,
+    fee_tx,
+    fee_yocto,
+  });
+  if (error) throw new Error(error.code === "23505" ? "That fee transaction already paid for another post." : error.message);
 }
+
+/** Sum of verified posting fees on posts in a community's scope, in yocto. */
+export async function feesCollected(communityId: string, challengeIds: number[]): Promise<bigint> {
+  const ors = [`community_id.eq.${communityId}`];
+  const ids = challengeIds.filter((n) => Number.isInteger(n));
+  if (ids.length) ors.push(`challenge_id.in.(${ids.join(",")})`);
+  // numeric comes back as a JSON number (1e22 prints as "1e+22"), so read it as exact text.
+  const { data, error } = await supabase.from("posts").select("fee:fee_yocto::text").not("fee_tx", "is", null).or(ors.join(","));
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as { fee: string | null }[]).reduce((a, r) => a + (r.fee ? BigInt(r.fee.split(".")[0]) : 0n), 0n);
+}
+
+// ---------- pending post across a wallet redirect ----------
+
+const PENDING = "ceaser:pending-post";
+export function savePendingPost(d: PostDraft) {
+  try {
+    sessionStorage.setItem(PENDING, JSON.stringify(d));
+  } catch {
+    /* private mode */
+  }
+}
+export function takePendingPost(): PostDraft | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING);
+    sessionStorage.removeItem(PENDING);
+    return raw ? (JSON.parse(raw) as PostDraft) : null;
+  } catch {
+    return null;
+  }
+}
+export function hasPendingPost(): boolean {
+  try {
+    return sessionStorage.getItem(PENDING) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Fired after a post lands, so open feeds can refresh at once. */
+export const POSTED_EVENT = "ceaser:posted";
 
 /** Adds the reaction, switches it, or removes it when `kind` is already set. */
 export async function toggleReaction(postId: string, account: string, kind: "diamond" | "cope", current: "diamond" | "cope" | null): Promise<"diamond" | "cope" | null> {

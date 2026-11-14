@@ -23,6 +23,8 @@ export const CONFIG = {
     oracle: "ceaser-oracle-756e8a.testnet",
     token: "ceaser-token-756e8a.testnet",
     staking_pool: "ceaser-pool-756e8a.testnet",
+    // Receives the 0.01 NEAR posting fee. Mirrors "treasury" in scripts/deployed.json.
+    treasury: "ceaser-treasury-756e8a.testnet",
   },
   gas: {
     ftTransferCall: "150000000000000",
