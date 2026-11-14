@@ -42,7 +42,9 @@ export function Ladder({
   const amounts = rungAmounts(total, rungs);
   const problem = validate(rungs);
   const amt = (v: bigint) => fromUnits(v < 0n ? 0n : v, decimals, 0);
-  const marker = mode === "live" ? markerFraction(rungs, progressMultiple ?? null) : null;
+  const rawMarker = mode === "live" ? markerFraction(rungs, progressMultiple ?? null) : null;
+  // Keep the label inside the clipped box when the price sits at or below the first rung.
+  const marker = rawMarker === null ? null : Math.min(0.97, Math.max(0.09, rawMarker));
 
   const edit = (i: number, field: keyof Rung, raw: string) => {
     setDrafts((d) => ({ ...d, [`${i}:${field}`]: raw }));
