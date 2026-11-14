@@ -1,0 +1,100 @@
+{
+ "fps": 30,
+ "intro": 7.0,
+ "reveal": 16.46,
+ "end": 131.68,
+ "vo": [
+  {
+   "id": 1,
+   "start": 7.0,
+   "dur": 2.32
+  },
+  {
+   "id": 2,
+   "start": 10.42,
+   "dur": 4.34
+  },
+  {
+   "id": 3,
+   "start": 16.96,
+   "dur": 5.25
+  },
+  {
+   "id": 4,
+   "start": 23.31,
+   "dur": 22.49
+  },
+  {
+   "id": 5,
+   "start": 46.9,
+   "dur": 12.36
+  },
+  {
+   "id": 6,
+   "start": 60.36,
+   "dur": 10.42
+  },
+  {
+   "id": 7,
+   "start": 71.88,
+   "dur": 8.62
+  },
+  {
+   "id": 8,
+   "start": 81.6,
+   "dur": 12.62
+  },
+  {
+   "id": 9,
+   "start": 95.32,
+   "dur": 23.82
+  },
+  {
+   "id": 10,
+   "start": 120.84,
+   "dur": 7.34
+  }
+ ],
+ "sfx": [
+  {
+   "file": "whoosh-fast.mp3",
+   "at": 1.2
+  },
+  {
+   "file": "whoosh-fast.mp3",
+   "at": 2.9
+  },
+  {
+   "file": "whoosh-fast.mp3",
+   "at": 4.4
+  },
+  {
+   "file": "whoosh-fast.mp3",
+   "at": 5.7
+  },
+  {
+   "file": "riser.mp3",
+   "at": 16.46
+  },
+  {
+   "file": "big-impact.mp3",
+   "at": 16.46
+  },
+  {
+   "file": "whoosh-deep-impact.mp3",
+   "at": 16.46
+  },
+  {
+   "file": "whoosh-tunnel.mp3",
+   "at": 46.5
+  },
+  {
+   "file": "whoosh-tunnel.mp3",
+   "at": 71.48
+  },
+  {
+   "file": "logo-impact.mp3",
+   "at": 120.99
+  }
+ ]
+}
