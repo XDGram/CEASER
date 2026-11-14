@@ -7,15 +7,16 @@ const reveal = (i = 0) => ({ initial: { opacity: 0, y: 20 }, whileInView: { opac
 
 function Ladder() {
   const rungs = [
-    { f: 50, g: "+50%" },
-    { f: 25, g: "+100%" },
-    { f: 25, g: "+200%" },
+    { f: 10, g: "5x" },
+    { f: 10, g: "10x" },
+    { f: 20, g: "25x" },
+    { f: 60, g: "100x" },
   ];
   return (
     <div className="flex items-end gap-3 h-[150px]">
       {rungs.map((r, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2">
-          <motion.div initial={{ height: 0 }} whileInView={{ height: `${40 + i * 30}%` }} viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.2 + i * 0.15, ease: "easeOut" }} className="w-full rounded-t-lg bg-ink flex items-start justify-center pt-2">
+          <motion.div initial={{ height: 0 }} whileInView={{ height: `${30 + i * 23}%` }} viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.2 + i * 0.15, ease: "easeOut" }} className="w-full rounded-t-lg bg-ink flex items-start justify-center pt-2">
             <span className="pixel text-paper text-[12px]">{r.f}%</span>
           </motion.div>
           <span className="font-mono text-[10px] text-ink-2">{r.g}</span>
@@ -35,7 +36,7 @@ export function Mechanics() {
         <motion.div {...reveal(0)} className="card p-6 sm:p-7 flex flex-col">
           <div className="pixel text-accent text-[13px]">01</div>
           <h3 className="mt-2 text-[20px]">ROI-laddered unlocks</h3>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">Split your bag into rungs that unlock as price climbs past targets set from the price at lock time. Your future self can't sell the 25% meant for +200% at +40%.</p>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">Split your moonbag into rungs that unlock as price climbs past targets set from the price at lock time: 10% at 5x, 10% at 10x, 20% at 25x, 60% at 100x. Your scared future self can't sell the 100x rung at 2x.</p>
           <div className="mt-6">
             <Ladder />
           </div>

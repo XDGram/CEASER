@@ -14,6 +14,8 @@ import { Defenses } from "../components/landing/Defenses";
 import { LiveChallenges } from "../components/landing/LiveChallenges";
 import { Closing } from "../components/landing/Closing";
 import { Footer } from "../components/Footer";
+import { NearCore } from "../components/landing/NearCore";
+import { CommunitiesPreview } from "../components/landing/CommunitiesPreview";
 import { ActivityToasts } from "../components/ActivityToasts";
 
 export function Landing() {
@@ -30,6 +32,7 @@ export function Landing() {
       <main className="overflow-x-clip">
         <Hero />
         <Stats />
+        <NearCore />
         <Intro />
         <Story />
         <HowItWorks />
@@ -37,6 +40,7 @@ export function Landing() {
         <Statement />
         <WhoFor />
         <Defenses />
+        <CommunitiesPreview />
         <LiveChallenges />
         <Closing />
       </main>

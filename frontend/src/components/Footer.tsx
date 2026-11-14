@@ -12,7 +12,7 @@ export function Footer() {
             <span className="text-[13px] font-medium">CEASER</span>
           </div>
           <p className="mt-3 max-w-[420px] text-[12.5px] leading-relaxed text-ink-2">
-            Built for the NEAR Hackathon 2026. The price oracle is a mock with real TWAP semantics. Do not use with real value.
+            Built on NEAR, for the NEAR Hackathon 2026. Every lock, Challenge and reward lives in a NEAR smart contract on testnet. The price oracle is a mock with real TWAP semantics. Do not use with real value.
           </p>
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px] font-mono text-ink-2 self-end">

@@ -6,8 +6,9 @@ import { Mark } from "./Mark";
 
 const links = [
   ["How it works", "#how"],
+  ["NEAR", "#near"],
   ["Mechanics", "#mechanics"],
-  ["Challenges", "#live"],
+  ["Communities", "#communities"],
   ["Spec", "https://github.com/XDGram/CEASER/blob/main/INTERFACE.md"],
 ];
 
