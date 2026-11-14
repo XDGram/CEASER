@@ -11,9 +11,22 @@ const tabs = [
   ["Overview", "/app", true],
   ["Lock", "/app/lock", false],
   ["Challenges", "/app/challenges", false],
+  ["Communities", "/app/communities", false],
   ["My locks", "/app/locks", false],
-  ["Community", "/app/community", false],
+  ["Floor", "/app/community", false],
 ] as const;
+
+function Tabs() {
+  return (
+    <>
+      {tabs.map(([label, to, end]) => (
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => `px-3 py-1.5 rounded-full text-[12.5px] whitespace-nowrap transition shrink-0 ${isActive ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"}`}>
+          {label}
+        </NavLink>
+      ))}
+    </>
+  );
+}
 
 export function AppShell() {
   const { ready, accountId, connect, disconnect } = useWallet();
@@ -35,12 +48,8 @@ export function AppShell() {
               <Mark tile size={22} />
               <span className="text-[13px] font-medium tracking-tight hidden sm:inline">CEASER</span>
             </Link>
-            <nav className="flex items-center gap-1 overflow-x-auto">
-              {tabs.map(([label, to, end]) => (
-                <NavLink key={to} to={to} end={end} className={({ isActive }) => `px-3 py-1.5 rounded-full text-[12.5px] whitespace-nowrap transition ${isActive ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"}`}>
-                  {label}
-                </NavLink>
-              ))}
+            <nav className="hidden lg:flex items-center gap-1 overflow-x-auto" aria-label="App">
+              <Tabs />
             </nav>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -64,6 +73,10 @@ export function AppShell() {
             )}
           </div>
         </div>
+              {/* Below lg the account chip leaves too little room beside the logo, so the tabs get their own scrolling row. */}
+        <nav className="lg:hidden flex items-center gap-1 overflow-x-auto px-3 sm:px-5 pb-2 -mt-1" aria-label="App">
+          <Tabs />
+        </nav>
       </header>
       {reachable === false && <div className="bg-bad/10 text-bad text-[12px] text-center py-1.5">The vault is not reachable right now. Reads retry every 30 seconds.</div>}
       <main className="flex-1 pb-20">

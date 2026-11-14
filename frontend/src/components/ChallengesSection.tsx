@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { attachChallenge, loadCommunity, type Community } from "../lib/community";
 import { CONFIG } from "../config";
-import { countdown, datetimeToTs, decodeResult, fmtDate, fmtDur, fromUnits, localDatetimeValue, nowTs, pct, toUnits } from "../lib/near";
+import { countdown, datetimeToTs, decodeResult, fmtDate, fmtDur, fromUnits, localDatetimeValue, nowTs, pct, toUnits, view } from "../lib/near";
 import { useProtocol } from "../lib/protocol";
 import { errorText, useWallet } from "../lib/wallet";
 import type { Challenge } from "../lib/types";
@@ -150,12 +151,80 @@ function ChallengeCard({ c, onSponsor }: { c: Challenge; onSponsor: (c: Challeng
   );
 }
 
+const PENDING_KEY = "ceaser:pending-community-challenge";
+
+/** The newest Challenge after `sinceCount` created by `creator`, polled briefly. */
+async function awaitNewChallenge(sinceCount: number, creator: string): Promise<number | null> {
+  for (let i = 0; i < 12; i++) {
+    const count = await view<number>(CONFIG.contracts.vault, "get_challenge_count").catch(() => sinceCount);
+    for (let id = count; id > sinceCount; id--) {
+      const c = await view<Challenge | null>(CONFIG.contracts.vault, "get_challenge", { challenge_id: id }).catch(() => null);
+      if (c && c.creator === creator) return id;
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return null;
+}
+
 export function ChallengesSection() {
   const { challenges, meta, refresh, refreshUser, config } = useProtocol();
-  const { accountId, call, toast } = useWallet();
+  const { accountId, call, toast, returnedTx } = useWallet();
   const token = CONFIG.contracts.token;
   const tm = meta(token);
   const [mode, setMode] = useState<"list" | "create" | "sponsor">("list");
+  const navigateTo = useNavigate();
+
+  // ?create=1&community=<id> opens the create form for that community and
+  // attaches the new Challenge to it afterwards. Without the params, nothing changes.
+  const [params] = useSearchParams();
+  const communityId = params.get("create") === "1" ? params.get("community") : null;
+  const [community, setCommunity] = useState<Community | null>(null);
+  useEffect(() => {
+    if (!communityId) return;
+    setMode("create");
+    loadCommunity(communityId)
+      .then((c) => {
+        setCommunity(c);
+        if (c) setTitle((t) => t || `${c.name}: `);
+      })
+      .catch(() => setCommunity(null));
+  }, [communityId]);
+
+  // MyNearWallet redirects away before create_challenge resolves. The pending
+  // community is kept in sessionStorage and attached on return using the
+  // Challenge count, the same way the lock flow resumes.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumed.current || !returnedTx || !accountId) return;
+    let pending: { communityId: string; sinceCount: number } | null = null;
+    try {
+      const raw = sessionStorage.getItem(PENDING_KEY);
+      sessionStorage.removeItem(PENDING_KEY);
+      pending = raw ? JSON.parse(raw) : null;
+    } catch {
+      pending = null;
+    }
+    resumed.current = true;
+    if (!pending || returnedTx.error) return;
+    const p = pending;
+    void (async () => {
+      const id = await awaitNewChallenge(p.sinceCount, accountId);
+      if (!id) return toast("The Challenge was not created, so nothing was attached", "err");
+      await finishAttach(p.communityId, id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnedTx, accountId]);
+
+  const finishAttach = async (cid: string, challengeId: number) => {
+    try {
+      await attachChallenge(cid, challengeId);
+      toast(`Challenge #${challengeId} added to the community`, "ok");
+    } catch (e) {
+      toast(`Challenge #${challengeId} created, but attaching it failed: ${errorText(e)}`, "err");
+    }
+    await refresh();
+    navigateTo(`/app/c/${cid}`);
+  };
   const [sponsorTarget, setSponsorTarget] = useState<Challenge | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -183,14 +252,37 @@ export function ChallengesSection() {
       if (params.deadline_ts - nowTs() < params.min_lock_duration_sec)
         throw new Error(`Deadline must be at least ${fmtDur(params.min_lock_duration_sec)} away, or nobody can join`);
       if (params.boost_reserve_bps > 5000) throw new Error("Boost reserve is at most 50%");
+      const sinceCount = communityId ? await view<number>(CONFIG.contracts.vault, "get_challenge_count").catch(() => 0) : 0;
+      if (communityId) {
+        try {
+          sessionStorage.setItem(PENDING_KEY, JSON.stringify({ communityId, sinceCount }));
+        } catch {
+          /* private mode */
+        }
+      }
       const out = await call(CONFIG.contracts.vault, "create_challenge", { params }, CONFIG.gas.createChallenge);
-      const id = decodeResult<number>(out);
+      // In-page wallets land here; browser wallets resume in the effect above.
+      try {
+        sessionStorage.removeItem(PENDING_KEY);
+      } catch {
+        /* ignore */
+      }
+      const id = decodeResult<number>(out) ?? (communityId && accountId ? await awaitNewChallenge(sinceCount, accountId) : null);
       if (id) toast(`Challenge #${id} created`, "ok");
+      if (communityId && id) {
+        await finishAttach(communityId, id);
+        return;
+      }
       setTitle("");
       setThreshold("");
       setMode("list");
       await refresh();
     } catch (e) {
+      try {
+        sessionStorage.removeItem(PENDING_KEY);
+      } catch {
+        /* ignore */
+      }
       toast(errorText(e), "err");
     } finally {
       setBusy(false);
@@ -229,8 +321,17 @@ export function ChallengesSection() {
         }
       />
 
+      {mode === "create" && communityId && (
+        <div className="mt-6 text-[13px] text-ink-2">
+          New campaign for{" "}
+          <Link to={`/app/c/${communityId}`} className="text-ink font-medium hover:underline underline-offset-4">
+            {community?.name ?? communityId}
+          </Link>
+          . It is added to the community once the Challenge exists.
+        </div>
+      )}
       {mode === "create" && (
-        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="card mt-6 p-6 sm:p-8">
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className={`card ${communityId ? "mt-3" : "mt-6"} p-6 sm:p-8`}>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <label className="field lg:col-span-3">
               <span>Title</span>

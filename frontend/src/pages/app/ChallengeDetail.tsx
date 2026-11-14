@@ -12,6 +12,7 @@ import { Composer, PostCard, useAutoRefresh } from "../../components/FloorFeed";
 import { convictionByOwner, loadFeed, type FeedData } from "../../lib/floor";
 import { RewardEstimate } from "../../components/RewardEstimate";
 import { profilePath } from "../../lib/profile";
+import { loadCommunities, type Community } from "../../lib/community";
 
 function Progress({ value, max }: { value: bigint; max: bigint }) {
   const p = max > 0n ? Math.min(100, Number((value * 1000n) / max) / 10) : 0;
@@ -36,6 +37,13 @@ export function ChallengeDetail() {
   const c: Challenge | undefined = challenges.find((x) => x.id === cid);
 
   const [lockers, setLockers] = useState<Lock[] | null>(null);
+  // Communities that list this Challenge; a failed read just hides the line.
+  const [partOf, setPartOf] = useState<Community[]>([]);
+  useEffect(() => {
+    loadCommunities()
+      .then((cs) => setPartOf(cs.filter((m) => m.challenge_ids.includes(cid))))
+      .catch(() => setPartOf([]));
+  }, [cid]);
   const [exited, setExited] = useState<Lock[]>([]);
   const [stakes, setStakes] = useState<Record<number, bigint>>({});
   const [sponsors, setSponsors] = useState<Sponsor[] | null>(null);
@@ -130,6 +138,14 @@ export function ChallengeDetail() {
             {stateTag}
           </div>
           <h1 className="mt-1 text-[26px] sm:text-[32px] tracking-tight leading-tight">{c.title}</h1>
+          {partOf.map((m) => (
+            <div key={m.id} className="mt-1 text-[12.5px] text-ink-2">
+              Part of{" "}
+              <Link to={`/app/c/${m.id}`} className="text-ink font-medium hover:underline underline-offset-4">
+                {m.name}
+              </Link>
+            </div>
+          ))}
           <div className="mt-1 text-[12.5px] text-ink-2">
             created by{" "}
             <Link to={profilePath(c.creator)} className="font-mono text-[11.5px] hover:text-ink underline-offset-4 hover:underline">
