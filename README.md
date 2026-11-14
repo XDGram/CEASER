@@ -9,7 +9,7 @@ on their Challenge reward.
 
 Built for a NEAR hackathon. Testnet only. **The price oracle is a mock.**
 
-**Live app:** https://ceaser-nine.vercel.app (connect a NEAR testnet wallet)
+**Live app:** https://ceaser-nine.vercel.app (connect a NEAR testnet wallet, or click "Try without a wallet")
 
 ## Demo
 
@@ -280,31 +280,52 @@ cd frontend && npm install && npm run dev
 copy the ids from `scripts/deployed.json` into it. `npm run build` writes
 `frontend/dist/`.
 
-**Landing page** (`/`): what CEASER is, a scroll-driven walkthrough of the demo
-arc with the real testnet numbers, the three mechanics, who it is for, the
-manipulation defenses, and the live Challenges read from the vault.
+**No wallet needed.** "Try without a wallet" (landing nav and hero) creates a
+fresh NEAR testnet account through the public testnet faucet, mints it 250,000
+CSTEST, and signs in-page with a key kept only in that browser. Every flow below
+works with it. Connecting MyNearWallet or Meteor works too.
 
-**App** (`/app`, after connecting a wallet):
+**Landing page** (`/`): the hook (selling scared at 2x), a Built on NEAR section
+with live NEAR figures and every NEAR role labelled by what enforces it, a
+scroll-driven walkthrough of the demo arc with real testnet numbers, the three
+mechanics, the manipulation defenses, a preview of the top communities, and the
+live Challenges read from the vault. Activity pop-ups show real recent events.
 
-- **Overview**: CSTEST balance, locked total, NEAR boost tier, claimable locks
-  and your Challenges.
-- **Lock**: strategy picker (time, ROI ladder, collective threshold) with a live
-  preview of the exact `ft_transfer_call` msg. Submitting runs an animated lock
-  flow (waiting for the wallet, confirming on NEAR, locked) and then jumps to
-  the new lock in My locks. An optional pledge note is posted to the Floor
-  alongside the lock.
-- **Challenges**: join, sponsor, create, finalize and refund. Each Challenge
-  has a detail page with a lockers leaderboard ordered by conviction, the
-  paper hands who exited, the sponsors, and an estimated reward for your lock.
-- **My locks**: per-tranche status, `check_unlock`, `claim` and `early_exit`.
-  Exiting opens a dialog with the breakdown (what is paid out, the penalty,
-  where it goes) and a hold-to-confirm button.
-- **The Floor** (`/app/community`): a community feed of theses, confessions,
-  pledges and exit receipts, with deterministic pixel avatars and a conviction
-  badge per account (amount locked now and longest hold). Posts are stored in Supabase through its public anon key
-  and are not wallet-signed yet. Receipts (pledges for active locks, paper-hands
-  receipts for exited locks) are derived from vault state on every load, not
-  stored.
+**App** (`/app`):
+
+- **Overview**: CSTEST balance, locked total, % protected, NEAR boost and NEAR
+  backing tier, claimable locks, your Challenges and latest community posts.
+- **Lock (Moonbag Protection)**: choose how much of your bag to protect, pick a
+  preset (Moonbag: 10% at 5x, 10% at 10x, 20% at 25x, 60% at 100x; Steady;
+  Conviction) or edit every price rung, and set a max duration whose safety
+  release is explained separately: everything still locked releases on that date
+  regardless of price. Time and Collective strategies remain. An animated flow
+  confirms the lock and jumps to it in My locks. An optional pledge note posts
+  to the feed.
+- **My locks**: a live ladder per lock with each rung's status (waiting, armed,
+  ripe, claimed, released), % still protected, the mock oracle TWAP marker
+  (labelled as the mock), a check button per rung, claim, and early exit. The
+  exit dialog leads with "You get back X. You lose Y", says exactly who receives
+  the penalty and which unlocks you cancel, and needs a press-and-hold to confirm.
+- **Challenges**: join, sponsor, create, finalize, refund; each has a detail page
+  with a conviction leaderboard, paper hands, sponsors and your estimated reward.
+- **Communities**: cards and a live cross-community leaderboard (committed
+  volume, participants, conviction, retention, NEAR backing). Each community
+  page has Conversation (posts, replies, reactions, pinned leader announcements),
+  Live (real activity), Campaigns (its Challenges and reward distribution
+  status), Treasury (sponsor deposits, penalties, reserve, payouts, NEAR post
+  fees, all from the vault) and milestones. Every figure is tagged On-chain or
+  Derived.
+- **The Floor**: the global feed of theses, confessions, updates, pledges and
+  exit receipts. Each post costs 0.01 NEAR paid to the treasury; the app verifies
+  the transfer on chain before publishing and links it. Seeded posts carry a Demo
+  tag.
+- **Profiles** (`/app/u/<account>`): stats, NEAR backing card and tier, badges
+  earned from on-chain facts, lock history and an activity timeline.
+
+Posts, reactions and communities are stored in Supabase through its public anon
+key. NEAR fees and tier gates are checked by the app against on-chain data, not
+by a contract; see the roadmap.
 
 ## Scripts
 
