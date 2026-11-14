@@ -33,10 +33,23 @@ Renderer: `video/tools/tweet-cards.cjs` pulls text, name, avatar and verified st
 public syndication endpoint and renders the card. Run it with the tweet links:
 `node video/tools/tweet-cards.cjs <outDir> <link> <link> ...` (from a folder with playwright).
 
-Links: waiting on the user (X search needs login from here). Found so far:
-- https://x.com/nyhrox/status/1927408491955695990 "i just roundtripped 25k because of this tweet"
-- https://x.com/oscayszn/status/1997047571576246363 "roundtripped so much...." (long tail, trim not allowed; probably skip)
-- user references: @mztacat, @ToolySOL "I should have held longer", a reply "In the end holding on was always better than selling for a lose"
+### Chosen intro tweets (user-supplied screenshots, docs/video/tweets/)
+All 1179px wide, X dark style; heights differ, so the montage places each on a fixed 16:9 frame.
+Two moods: regret (the problem) and "hold your bags" (the mantra CEASER enforces).
+
+| File | Account | Text | Mood |
+|---|---|---|---|
+| 01-mztacat.jpg | @mztacat (verified) | "You think your bags will disappear when u sell the top? someone's gonna hold the bag for you bro.. Just don't be the last!" | warning |
+| 02-ToolySOL.jpg | @ToolySOL (verified) | "I should have held longer" | regret |
+| 03-0xSweep.jpg | @0xSweep (verified) | "I should have held instead of panic selling" | regret |
+| 04-reply-holding-on.jpg | reply, no header visible | "In the end holding on was always better than selling for a lose" | regret, lesson |
+| 05-DonWedge.jpg | @DonWedge (verified) | "Hold your bags like you hold grudges with passion" | mantra |
+| 06-shahh.jpg | @shahh (verified) | "Hold your bags / We will bounce soon" | mantra |
+| 07-lynk0x.jpg | @lynk0x (verified) | "Hold your bags" | mantra |
+| 08-ramonos.jpg | @ramonos (verified) | "great things takes time / hold your bags" | mantra |
+| 09-nyhrox.png | @nyhrox (verified) | "i just roundtripped 25k because of this tweet" (rendered by tweet-cards.cjs) | regret |
+
+Note: 04 is a cropped reply with no name or avatar; use it as a text-only beat or find its source link.
 
 Note: these are public posts by real people. Using them as quoted, unaltered screenshots in a
 hackathon demo is normal practice; do not edit their text, and credit "Posts from X" on screen.
