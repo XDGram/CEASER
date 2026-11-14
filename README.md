@@ -85,6 +85,24 @@ The full method list and every JSON shape live in [INTERFACE.md](INTERFACE.md).
 That file is the contract between the pieces below and is the source of truth
 if this README and the code ever disagree.
 
+## NEAR at the core
+
+NEAR is not a side feature in CEASER; it is what gives every action weight.
+
+| NEAR role | What it does | Enforced by |
+|---|---|---|
+| **Reward boost** | NEAR staked in a whitelisted pool multiplies your share of any Challenge pool, up to 2x | the vault contract, at claim time |
+| **Price of a voice** | Every Floor or community post and reply costs 0.01 NEAR, paid to the protocol treasury; each post links its fee transaction | the app, which verifies the transfer on chain before publishing |
+| **Backing tiers** | NEAR held plus staked sets your tier: Holder (1), Backer (10), Patron (100), Whale (1,000) | the app, from on-chain balances |
+| **Right to post** | Posting needs at least 1 NEAR in the account | the app |
+| **Right to launch** | Starting a campaign needs 2 NEAR plus 1 NEAR per 1M tokens of target (capped at 50); creating a community needs 10 NEAR; announcements need 25 NEAR held | the app |
+| **Community strength** | Communities rank by the NEAR backing of their active lockers, next to committed volume | derived from on-chain balances |
+
+Memecoin activity becomes NEAR demand: to hold, speak, lead or launch on CEASER you hold, stake or spend NEAR.
+Gates marked "the app" are checked against on-chain balances and transactions in the client; on this
+testnet demo the feed database is open, so they are not contract-enforced. Moving them into the vault is
+the first roadmap item.
+
 ## The three core mechanics
 
 ### 1. Tranche locks with a two-read price commit
@@ -302,6 +320,12 @@ through near-cli-rs and JSON-RPC.
 
 ## Roadmap: not shipped
 
+- **NEAR campaign bonds in the vault.** Creating a Challenge locks a NEAR bond scaled
+  to its target inside the contract: returned on success, paid to the lockers on
+  failure. Today the NEAR requirement to launch is a balance check in the app.
+- **Contract-enforced NEAR gates and post fees.** Move the posting fee and tier
+  checks from the app into a contract (or a verified server) so they cannot be
+  bypassed by writing to the feed database directly.
 - **Real oracle.** `RefTwapOracle` is a documented stub. A production deploy
   needs a Ref Finance (or other DEX) TWAP read with on-chain liquidity checks.
 - **Pyth integration** for NEAR, BTC or ETH denominated price targets, and a
@@ -314,7 +338,7 @@ through near-cli-rs and JSON-RPC.
   Challenge entirely; there is no partial-stay credit.
 - **Governance.** The vault owner whitelists staking pools, sets the oracle and
   updates config directly. No DAO, no timelock.
-- **Wallet-signed Floor posts.** Posts are written with the public Supabase
+- **Wallet-signed Floor posts** (posts already carry a verified NEAR fee transaction). Posts are written with the public Supabase
   key and carry no signature. The next step is a NEP-413 signed message per
   post, verified by row-level security.
 - **Stored receipts poller.** Exit receipts are derived from vault state on
